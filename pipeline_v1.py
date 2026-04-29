@@ -9,12 +9,10 @@ OLLAMA_MODEL = "deepseek-coder:6.7b"
 
 PROJECT_PATH = Path("libraries/commons-lang3-3.12.0-sources")
 TARGET_JAVA_FILE = PROJECT_PATH / "org/apache/commons/lang3/BitField.java"
-# TARGET_JAVA_FILE = Path("TwoSum.java")
 
 MAVEN_PROJECT = Path("test-generator")
 
 OUTPUT_TEST_FILE = MAVEN_PROJECT / "src/test/java/org/apache/commons/lang3/BitFieldTest.java"
-# OUTPUT_TEST_FILE = MAVEN_PROJECT / "src/test/java/TwoSumTest.java"
 
 # =========================
 # UTIL FUNCTIONS
@@ -67,7 +65,6 @@ def main():
     # 3. Call Ollama via API
     print(f"Asking Ollama ({OLLAMA_MODEL}) to generate tests... (this may take a moment)")
     
-    # Using the official ollama python package
     response = ollama.chat(model=OLLAMA_MODEL, messages=[
         {'role': 'user', 'content': prompt}
     ])
