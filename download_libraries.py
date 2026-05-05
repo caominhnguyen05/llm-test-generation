@@ -3,13 +3,16 @@ import requests
 from pathlib import Path
 import zipfile
 import shutil
+import xml.etree.ElementTree as ET
 
 # =========================
 # CONFIG
 # =========================
-CSV_FILE = "evosuite_results.csv"
-OUTPUT_DIR = Path("selected_libraries")
+CSV_FILE = "evosuite_results_small.csv"
+OUTPUT_DIR = Path("libraries_small")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
+POM_NS = "http://maven.apache.org/POM/4.0.0"
+ET.register_namespace("", POM_NS)
 
 # =========================
 # HELPERS
@@ -43,6 +46,101 @@ def extract_jar(jar_path, extract_to):
         print(f"Extraction failed: {jar_path} -> {e}")
         return False
 
+def pom_tag(name):
+    return f"{{{POM_NS}}}{name}"
+
+def find_extracted_pom(extracted_src):
+    maven_poms = list(extracted_src.glob("META-INF/maven/**/pom.xml"))
+    if maven_poms:
+        return maven_poms[0]
+
+    poms = list(extracted_src.rglob("pom.xml"))
+    return poms[0] if poms else None
+
+def child(parent, name):
+    return parent.find(pom_tag(name))
+
+def get_or_create_child(parent, name):
+    existing = child(parent, name)
+    if existing is not None:
+        return existing
+
+    created = ET.SubElement(parent, pom_tag(name))
+    return created
+
+def has_dependency(dependencies, group_id, artifact_id):
+    for dependency in dependencies.findall(pom_tag("dependency")):
+        group = child(dependency, "groupId")
+        artifact = child(dependency, "artifactId")
+        if group is not None and artifact is not None:
+            if group.text == group_id and artifact.text == artifact_id:
+                return True
+    return False
+
+def add_dependency(dependencies, group_id, artifact_id, version, scope="test"):
+    if has_dependency(dependencies, group_id, artifact_id):
+        return
+
+    dependency = ET.SubElement(dependencies, pom_tag("dependency"))
+    ET.SubElement(dependency, pom_tag("groupId")).text = group_id
+    ET.SubElement(dependency, pom_tag("artifactId")).text = artifact_id
+    ET.SubElement(dependency, pom_tag("version")).text = version
+    ET.SubElement(dependency, pom_tag("scope")).text = scope
+
+def has_plugin(plugins, group_id, artifact_id):
+    for plugin in plugins.findall(pom_tag("plugin")):
+        group = child(plugin, "groupId")
+        artifact = child(plugin, "artifactId")
+        if group is not None and artifact is not None:
+            if group.text == group_id and artifact.text == artifact_id:
+                return True
+    return False
+
+def add_jacoco_plugin(plugins):
+    group_id = "org.jacoco"
+    artifact_id = "jacoco-maven-plugin"
+    if has_plugin(plugins, group_id, artifact_id):
+        return
+
+    plugin = ET.SubElement(plugins, pom_tag("plugin"))
+    ET.SubElement(plugin, pom_tag("groupId")).text = group_id
+    ET.SubElement(plugin, pom_tag("artifactId")).text = artifact_id
+    ET.SubElement(plugin, pom_tag("version")).text = "0.8.12"
+
+    executions = ET.SubElement(plugin, pom_tag("executions"))
+    prepare_agent = ET.SubElement(executions, pom_tag("execution"))
+    goals = ET.SubElement(prepare_agent, pom_tag("goals"))
+    ET.SubElement(goals, pom_tag("goal")).text = "prepare-agent"
+
+    report = ET.SubElement(executions, pom_tag("execution"))
+    ET.SubElement(report, pom_tag("id")).text = "report"
+    ET.SubElement(report, pom_tag("phase")).text = "test"
+    report_goals = ET.SubElement(report, pom_tag("goals"))
+    ET.SubElement(report_goals, pom_tag("goal")).text = "report"
+
+def prepare_pom_from_sources(base_dir, extracted_src):
+    source_pom = find_extracted_pom(extracted_src)
+    if source_pom is None:
+        print(f"No pom.xml found in extracted sources: {extracted_src}")
+        return
+
+    target_pom = base_dir / "pom.xml"
+    shutil.copy(source_pom, target_pom)
+
+    tree = ET.parse(target_pom)
+    root = tree.getroot()
+
+    dependencies = get_or_create_child(root, "dependencies")
+    add_dependency(dependencies, "junit", "junit", "4.13.2")
+    add_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
+
+    build = get_or_create_child(root, "build")
+    plugins = get_or_create_child(build, "plugins")
+    add_jacoco_plugin(plugins)
+
+    ET.indent(tree, space="    ")
+    tree.write(target_pom, encoding="utf-8", xml_declaration=True)
+
 def create_maven_project(base_dir, group_id, artifact_id, version):
     src_main = base_dir / "src/main/java"
     src_main.mkdir(parents=True, exist_ok=True)
@@ -55,44 +153,7 @@ def create_maven_project(base_dir, group_id, artifact_id, version):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(file, target)
 
-    # Create pom.xml
-    pom = f"""<project xmlns="http://maven.apache.org/POM/4.0.0"
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
-<modelVersion>4.0.0</modelVersion>
-
-<groupId>{group_id}</groupId>
-<artifactId>{artifact_id}</artifactId>
-<version>{version}</version>
-
-<dependencies>
-    <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.13.2</version>
-        <scope>test</scope>
-    </dependency>
-</dependencies>
-
-<build>
-    <plugins>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <version>3.8.1</version>
-            <configuration>
-                <source>1.8</source>
-                <target>1.8</target>
-            </configuration>
-        </plugin>
-    </plugins>
-</build>
-
-</project>
-"""
-    (base_dir / "pom.xml").write_text(pom)
+    prepare_pom_from_sources(base_dir, extracted_src)
 
 # =========================
 # MAIN
