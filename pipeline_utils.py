@@ -1,0 +1,123 @@
+import re
+from pathlib import Path
+
+
+def remove_license_comment(source_code: str) -> str:
+    """Remove a leading license comment if present to avoid LLM confusion."""
+    if source_code.strip().startswith("/*") and "*/" in source_code:
+        return source_code.split("*/", 1)[1].strip()
+    return source_code.strip()
+
+
+def read_file(path: Path) -> str:
+    with open(path, "r", encoding="utf-8") as file:
+        return remove_license_comment(file.read())
+
+
+def write_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as file:
+        file.write(content.rstrip() + "\n")
+
+
+def extract_java_code(llm_output: str) -> str:
+    java_block = re.search(r"```java\s*(.*?)```", llm_output, flags=re.DOTALL | re.IGNORECASE)
+    if java_block:
+        return java_block.group(1).strip()
+
+    generic_block = re.search(r"```\s*(.*?)```", llm_output, flags=re.DOTALL)
+    if generic_block:
+        return generic_block.group(1).strip()
+
+    return llm_output.strip()
+
+
+def extract_package_and_class(java_file: Path, source_root: Path) -> tuple[str, str]:
+    rel_path = java_file.relative_to(source_root).with_suffix("")
+    return ".".join(rel_path.parts[:-1]), rel_path.parts[-1]
+
+
+def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
+    imports = re.findall(r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*$", test_code, flags=re.MULTILINE)
+    code_without_imports = re.sub(
+        r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*\n?", "", test_code, flags=re.MULTILINE
+    )
+    return code_without_imports.strip(), [import_line.strip() for import_line in imports]
+
+
+def strip_package_declarations(test_code: str) -> str:
+    return re.sub(r"^\s*package\s+[\w.]+;\s*\n?", "", test_code, flags=re.MULTILINE).strip()
+
+
+def infer_missing_imports(test_code: str) -> set[str]:
+    imports = {
+        "import org.junit.Test;",
+        "import static org.junit.Assert.*;",
+    }
+
+    junit_symbols = {
+        "@Before": "import org.junit.Before;",
+        "@After": "import org.junit.After;",
+        "@BeforeClass": "import org.junit.BeforeClass;",
+        "@AfterClass": "import org.junit.AfterClass;",
+        "@Rule": "import org.junit.Rule;",
+        "ExpectedException": "import org.junit.rules.ExpectedException;",
+        "TemporaryFolder": "import org.junit.rules.TemporaryFolder;",
+    }
+    for symbol, import_line in junit_symbols.items():
+        if symbol in test_code:
+            imports.add(import_line)
+
+    java_symbols = {
+        "Arrays.": "import java.util.Arrays;",
+        "Collections.": "import java.util.Collections;",
+        "List<": "import java.util.List;",
+        "Map<": "import java.util.Map;",
+        "Set<": "import java.util.Set;",
+        "IOException": "import java.io.IOException;",
+        "StringReader": "import java.io.StringReader;",
+        "StringWriter": "import java.io.StringWriter;",
+        "ByteArrayInputStream": "import java.io.ByteArrayInputStream;",
+        "ByteArrayOutputStream": "import java.io.ByteArrayOutputStream;",
+    }
+    for symbol, import_line in java_symbols.items():
+        if symbol in test_code:
+            imports.add(import_line)
+
+    return imports
+
+
+def normalize_test_code(test_code: str, package_name: str, class_name: str) -> str:
+    """Clean common LLM formatting issues and add imports needed by JUnit 4 tests."""
+    test_code = extract_java_code(test_code)
+    test_code = test_code.replace("\r\n", "\n").replace("\r", "\n").strip()
+    test_code, existing_imports = remove_existing_imports(test_code)
+    test_code = strip_package_declarations(test_code)
+
+    expected_class = f"{class_name}Test"
+    test_code = re.sub(
+        r"\bpublic\s+class\s+\w+\b",
+        f"public class {expected_class}",
+        test_code,
+        count=1,
+    )
+    if not re.search(rf"\bclass\s+{re.escape(expected_class)}\b", test_code):
+        raise ValueError(f"Generated code does not contain class {expected_class}.")
+
+    imports = set(existing_imports) | infer_missing_imports(test_code)
+    imports_block = "\n".join(sorted(imports))
+
+    return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
+
+
+def quick_syntax_check(test_code: str, class_name: str) -> list[str]:
+    issues = []
+    if f"public class {class_name}Test" not in test_code:
+        issues.append(f"missing public class {class_name}Test declaration")
+    if "@Test" not in test_code:
+        issues.append("missing @Test method annotation")
+    if test_code.count("{") != test_code.count("}"):
+        issues.append("unbalanced curly braces")
+    if test_code.count("(") != test_code.count(")"):
+        issues.append("unbalanced parentheses")
+    return issues

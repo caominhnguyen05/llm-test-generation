@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 # =========================
 # CONFIG
 # =========================
-CSV_FILE = "evosuite_results_small.csv"
+CSV_FILE = "evosuite_results_small_copy.csv"
 OUTPUT_DIR = Path("libraries_small")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
@@ -118,17 +118,95 @@ def add_jacoco_plugin(plugins):
     report_goals = ET.SubElement(report, pom_tag("goals"))
     ET.SubElement(report_goals, pom_tag("goal")).text = "report"
 
-def prepare_pom_from_sources(base_dir, extracted_src):
+def set_text_child(parent, name, text):
+    elem = get_or_create_child(parent, name)
+    elem.text = text
+    return elem
+
+
+def create_minimal_pom(target_pom, group_id, artifact_id, version):
+    project = ET.Element(pom_tag("project"))
+
+    project.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    project.set(
+        "xsi:schemaLocation",
+        "http://maven.apache.org/POM/4.0.0 "
+        "http://maven.apache.org/xsd/maven-4.0.0.xsd"
+    )
+
+    ET.SubElement(project, pom_tag("modelVersion")).text = "4.0.0"
+    ET.SubElement(project, pom_tag("groupId")).text = group_id
+    ET.SubElement(project, pom_tag("artifactId")).text = artifact_id
+    ET.SubElement(project, pom_tag("version")).text = version
+    ET.SubElement(project, pom_tag("packaging")).text = "jar"
+
+    properties = ET.SubElement(project, pom_tag("properties"))
+    ET.SubElement(properties, pom_tag("maven.compiler.source")).text = "8"
+    ET.SubElement(properties, pom_tag("maven.compiler.target")).text = "8"
+    ET.SubElement(properties, pom_tag("project.build.sourceEncoding")).text = "UTF-8"
+
+    dependencies = ET.SubElement(project, pom_tag("dependencies"))
+    add_dependency(dependencies, "junit", "junit", "4.13.2")
+    add_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
+
+    build = ET.SubElement(project, pom_tag("build"))
+    plugins = ET.SubElement(build, pom_tag("plugins"))
+
+    compiler = ET.SubElement(plugins, pom_tag("plugin"))
+    ET.SubElement(compiler, pom_tag("groupId")).text = "org.apache.maven.plugins"
+    ET.SubElement(compiler, pom_tag("artifactId")).text = "maven-compiler-plugin"
+    ET.SubElement(compiler, pom_tag("version")).text = "3.11.0"
+
+    configuration = ET.SubElement(compiler, pom_tag("configuration"))
+    ET.SubElement(configuration, pom_tag("source")).text = "8"
+    ET.SubElement(configuration, pom_tag("target")).text = "8"
+
+    surefire = ET.SubElement(plugins, pom_tag("plugin"))
+    ET.SubElement(surefire, pom_tag("groupId")).text = "org.apache.maven.plugins"
+    ET.SubElement(surefire, pom_tag("artifactId")).text = "maven-surefire-plugin"
+    ET.SubElement(surefire, pom_tag("version")).text = "3.2.5"
+
+    add_jacoco_plugin(plugins)
+
+    tree = ET.ElementTree(project)
+    ET.indent(tree, space="    ")
+    tree.write(target_pom, encoding="utf-8", xml_declaration=True)
+
+
+def prepare_pom_from_sources(base_dir, extracted_src, group_id, artifact_id, version):
     source_pom = find_extracted_pom(extracted_src)
+    target_pom = base_dir / "pom.xml"
+
     if source_pom is None:
-        print(f"No pom.xml found in extracted sources: {extracted_src}")
+        print(f"No pom.xml found. Creating minimal pom.xml: {target_pom}")
+        create_minimal_pom(target_pom, group_id, artifact_id, version)
         return
 
-    target_pom = base_dir / "pom.xml"
     shutil.copy(source_pom, target_pom)
 
     tree = ET.parse(target_pom)
     root = tree.getroot()
+
+    # Ensure basic Maven coordinates exist
+    set_text_child(root, "modelVersion", "4.0.0")
+
+    if child(root, "groupId") is None and child(root, "parent") is None:
+        set_text_child(root, "groupId", group_id)
+
+    if child(root, "artifactId") is None:
+        set_text_child(root, "artifactId", artifact_id)
+
+    if child(root, "version") is None and child(root, "parent") is None:
+        set_text_child(root, "version", version)
+
+    packaging = child(root, "packaging")
+    if packaging is None:
+        set_text_child(root, "packaging", "jar")
+
+    properties = get_or_create_child(root, "properties")
+    set_text_child(properties, "maven.compiler.source", "8")
+    set_text_child(properties, "maven.compiler.target", "8")
+    set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
 
     dependencies = get_or_create_child(root, "dependencies")
     add_dependency(dependencies, "junit", "junit", "4.13.2")
@@ -136,7 +214,24 @@ def prepare_pom_from_sources(base_dir, extracted_src):
 
     build = get_or_create_child(root, "build")
     plugins = get_or_create_child(build, "plugins")
+
     add_jacoco_plugin(plugins)
+
+    if not has_plugin(plugins, "org.apache.maven.plugins", "maven-compiler-plugin"):
+        compiler = ET.SubElement(plugins, pom_tag("plugin"))
+        ET.SubElement(compiler, pom_tag("groupId")).text = "org.apache.maven.plugins"
+        ET.SubElement(compiler, pom_tag("artifactId")).text = "maven-compiler-plugin"
+        ET.SubElement(compiler, pom_tag("version")).text = "3.11.0"
+
+        configuration = ET.SubElement(compiler, pom_tag("configuration"))
+        ET.SubElement(configuration, pom_tag("source")).text = "8"
+        ET.SubElement(configuration, pom_tag("target")).text = "8"
+
+    if not has_plugin(plugins, "org.apache.maven.plugins", "maven-surefire-plugin"):
+        surefire = ET.SubElement(plugins, pom_tag("plugin"))
+        ET.SubElement(surefire, pom_tag("groupId")).text = "org.apache.maven.plugins"
+        ET.SubElement(surefire, pom_tag("artifactId")).text = "maven-surefire-plugin"
+        ET.SubElement(surefire, pom_tag("version")).text = "3.2.5"
 
     ET.indent(tree, space="    ")
     tree.write(target_pom, encoding="utf-8", xml_declaration=True)
@@ -153,7 +248,7 @@ def create_maven_project(base_dir, group_id, artifact_id, version):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(file, target)
 
-    prepare_pom_from_sources(base_dir, extracted_src)
+    prepare_pom_from_sources(base_dir, extracted_src, group_id, artifact_id, version)
 
 # =========================
 # MAIN

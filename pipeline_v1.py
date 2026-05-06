@@ -1,11 +1,12 @@
 import ollama
 from pathlib import Path
 import json
+from ollama_models import get_model, list_models
 
 # =========================
 # CONFIG
 # =========================
-OLLAMA_MODEL = "deepseek-coder:6.7b"
+OLLAMA_MODEL = get_model("qwen_coder_small")
 
 PROJECT_PATH = Path("libraries/commons-lang3-3.12.0-sources")
 TARGET_JAVA_FILE = PROJECT_PATH / "org/apache/commons/lang3/BitField.java"

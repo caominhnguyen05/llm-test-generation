@@ -1,21 +1,35 @@
 from ollama import chat
 from pathlib import Path
-import json
-import re
+from ollama_models import get_model, list_models
 
 # =========================
 # CONFIG
 # =========================
-OLLAMA_MODEL = "qwen2.5-coder:7b"
+OLLAMA_MODEL = get_model("qwen_coder_small")
 
-TARGET_PACKAGE = "org.apache.commons.lang3"
-TARGET_CLASS = "CharSetUtils"
+# Root folder containing selected Maven-style projects
+LIBRARIES_ROOT = Path("selected_libraries")
 
-PROJECT_PATH = Path("libraries/commons-lang3-3.12.0-sources")
-TARGET_JAVA_FILE = PROJECT_PATH / TARGET_PACKAGE.replace(".", "/") / f"{TARGET_CLASS}.java"
+# Pick library folder (manual OR random)
+TARGET_LIBRARY = "commons-csv-1.8"
+LIBRARY_PATH = LIBRARIES_ROOT / TARGET_LIBRARY
 
-MAVEN_PROJECT = Path("test-generator")
-OUTPUT_TEST_FILE = MAVEN_PROJECT / "src/test/java" / TARGET_PACKAGE.replace(".", "/") / f"{TARGET_CLASS}Test.java"
+# Source root inside Maven project
+SOURCE_ROOT = LIBRARY_PATH / "src/main/java"
+TEST_ROOT = LIBRARY_PATH / "src/test/java"
+
+# You manually select the file you want to test
+TARGET_JAVA_FILE = SOURCE_ROOT / "org/apache/commons/csv/CSVRecord.java"
+
+
+def extract_package_and_class(java_file: Path):
+    rel_path = java_file.relative_to(SOURCE_ROOT).with_suffix("")
+    parts = rel_path.parts
+
+    class_name = parts[-1]
+    package_name = ".".join(parts[:-1])
+
+    return package_name, class_name
 
 # =========================
 # UTIL FUNCTIONS
@@ -43,21 +57,38 @@ def main():
     if not TARGET_JAVA_FILE.exists():
         print(f"Error: {TARGET_JAVA_FILE} not found.")
         return
-        
+
+    # Read source
     source_code = read_file(TARGET_JAVA_FILE)
     print(f"Loaded {TARGET_JAVA_FILE}.")
 
-    # Build the STRUCTURED prompt
-    prompt = f"""
-    Write a complete JUnit 4 test class for the Java source provided below. Maximize line and branch coverage,
-    and make sure the test class compiles and runs without errors.
+    # 🔥 derive package + class from file path
+    TARGET_PACKAGE, TARGET_CLASS = extract_package_and_class(TARGET_JAVA_FILE)
 
-    Requirements:
+    print(f"Package: {TARGET_PACKAGE}")
+    print(f"Class: {TARGET_CLASS}")
+
+    # ✅ correct Maven-style output location
+    OUTPUT_TEST_FILE = (
+        TEST_ROOT /
+        TARGET_PACKAGE.replace(".", "/") /
+        f"{TARGET_CLASS}Test.java"
+    )
+
+    OUTPUT_TEST_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build prompt
+    prompt = f"""
+    Write a complete JUnit 4 test class covering the functionality of the Java library class provided below. Make sure the test follows correct syntax and compiles without errors.
+    Maximize code coverage by including tests for normal cases, edge cases, and error handling.
+    If you use any classes in your test code, include the necessary import statements.
+
+    Follow these requirements:
     1. Package: The test MUST belong to the package `{TARGET_PACKAGE}`.
     2. Class Name: The test MUST be named `{TARGET_CLASS}Test` and be declared `public`.
     3. Imports: Include all necessary imports (e.g., JUnit annotations, assertions).
     4. Test Methods: Each test method MUST be annotated with @Test
-    5. Coverage: Write distinct test cases for standard behavior, boundary values, and edge cases (e.g., null inputs) to maximize branch coverage.
+    5. Coverage: Write distinct test cases for standard behavior, boundary values, and edge cases (e.g., null inputs).
     6. Output ONLY the raw Java code enclosed in a ```java ... ``` block. No explanations.
 
     Source Code:
@@ -65,9 +96,7 @@ def main():
     {source_code}
     ```
     """
-    # prompt = "Write Java solution for the Two Sum Leetcode problem. The solution should be a complete Java class named TwoSum with a method twoSum that takes an array of integers and a target integer, and returns the indices of the two numbers that add up to the target. The code should be enclosed in a ```java ... ``` block."
 
-    # Call Ollama via API - Use streaming responses
     print(f"Asking Ollama ({OLLAMA_MODEL}) to generate tests...")
 
     stream = chat(
@@ -77,7 +106,6 @@ def main():
     )
 
     llm_output = ""
-
     for chunk in stream:
         token = chunk['message']['content']
         print(token, end='', flush=True)
@@ -88,10 +116,11 @@ def main():
     # Extract Java code
     test_code = extract_java_code(llm_output)
 
-    # Sanity Check: Force package declaration if LLM forgot
+    # Ensure correct package
     if f"package {TARGET_PACKAGE};" not in test_code:
         test_code = f"package {TARGET_PACKAGE};\n\n" + test_code
-        
+
+    # 💾 Save in correct mirrored folder
     write_file(OUTPUT_TEST_FILE, test_code)
     print(f"Done! Test saved to {OUTPUT_TEST_FILE}")
 
