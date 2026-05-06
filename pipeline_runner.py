@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from llm_helpers import call_llm_stream, get_generation_prompt, get_repair_prompt
-from maven_helpers import run_maven_test
+from maven_helpers import run_maven_test_compile, run_maven_test_ignore_failures
 from pipeline_config import PipelineConfig
 from pipeline_utils import extract_package_and_class, normalize_test_code, quick_syntax_check, read_file, write_file
 
@@ -63,9 +63,10 @@ def run_pipeline(config: PipelineConfig) -> None:
     save_test_code(output_test_file, test_code, class_name, "Initial")
 
     for attempt in range(config.attempts + 1):
-        success, error_output = run_maven_test(config.library_path, f"{class_name}Test")
+        success, error_output = run_maven_test_compile(config.library_path, f"{class_name}Test")
         if success:
-            print(f"SUCCESS: test compiled and passed on attempt {attempt}.")
+            run_maven_test_ignore_failures(config.library_path, f"{class_name}Test")
+            print(f"SUCCESS: test compiled on attempt {attempt}.")
             return
 
         if attempt >= config.attempts:
@@ -73,6 +74,6 @@ def run_pipeline(config: PipelineConfig) -> None:
             print(error_output)
             return
 
-        print(f"FAILED. Starting repair loop {attempt + 1}/{config.attempts}...")
+        print(f"Compilation failed. Starting repair loop {attempt + 1}/{config.attempts}...")
         test_code = repair_test(config, test_code, error_output, source_code, package_name, class_name)
         save_test_code(output_test_file, test_code, class_name, "Repaired")
