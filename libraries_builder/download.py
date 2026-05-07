@@ -1,5 +1,6 @@
 import csv
 import requests
+import subprocess
 from pathlib import Path
 import zipfile
 import shutil
@@ -20,6 +21,16 @@ def build_url(group_id, artifact_id, version):
     filename = f"{artifact_id}-{version}-sources.jar"
     url = f"{MAVEN_CENTRAL}/{group_path}/{artifact_id}/{version}/{filename}"
     return url, filename
+
+def build_pom_url(group_id: str, artifact_id: str, version: str) -> tuple[str, str]:
+    group_path = group_id.replace(".", "/")
+    filename = f"{artifact_id}-{version}.pom"
+    url = f"{MAVEN_CENTRAL}/{group_path}/{artifact_id}/{version}/{filename}"
+    return url, filename
+
+def download_pom_from_maven_central(target_pom: Path, group_id: str, artifact_id: str, version: str) -> bool:
+    url, _ = build_pom_url(group_id, artifact_id, version)
+    return download_file(url, target_pom)
 
 def download_file(url, output_path):
     try:
@@ -171,16 +182,13 @@ def create_minimal_pom(target_pom, group_id, artifact_id, version):
     tree.write(target_pom, encoding="utf-8", xml_declaration=True)
 
 
-def prepare_pom_from_sources(base_dir, extracted_src, group_id, artifact_id, version):
-    source_pom = find_extracted_pom(extracted_src)
+def prepare_pom(base_dir, group_id, artifact_id, version):
     target_pom = base_dir / "pom.xml"
 
-    if source_pom is None:
-        print(f"No pom.xml found. Creating minimal pom.xml: {target_pom}")
+    if not download_pom_from_maven_central(target_pom, group_id, artifact_id, version):
+        print(f"Could not download pom.xml from Maven Central. Creating minimal pom.xml: {target_pom}")
         create_minimal_pom(target_pom, group_id, artifact_id, version)
         return
-
-    shutil.copy(source_pom, target_pom)
 
     tree = ET.parse(target_pom)
     root = tree.getroot()
@@ -246,7 +254,30 @@ def create_maven_project(base_dir, group_id, artifact_id, version):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(file, target)
 
-    prepare_pom_from_sources(base_dir, extracted_src, group_id, artifact_id, version)
+    prepare_pom(base_dir, group_id, artifact_id, version)
+
+def compile_library(base_dir: Path) -> tuple[bool, str]:
+    command = [
+        "mvn.cmd",
+        "-q",
+        "compile",
+        "-Drat.skip=true",
+        "-Danimal.sniffer.skip=true",
+    ]
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    output = result.stdout + "\n" + result.stderr
+    return result.returncode == 0, output
+
+def delete_library(lib_dir: Path, reason: str) -> None:
+    if lib_dir.exists():
+        shutil.rmtree(lib_dir)
+        print(f"Deleted {lib_dir}: {reason}")
 
 # =========================
 # MAIN
@@ -276,6 +307,7 @@ def main():
             if not jar_path.exists():
                 success = download_file(url, jar_path)
                 if not success:
+                    delete_library(lib_dir, "source jar download failed")
                     continue
                 print(f"Downloaded: {group_id}:{artifact_id}:{version}")
             else:
@@ -287,10 +319,20 @@ def main():
                 extract_dir.mkdir()
                 ok = extract_jar(jar_path, extract_dir)
                 if not ok:
+                    delete_library(lib_dir, "source jar extraction failed")
                     continue
 
             # Create Maven project
             create_maven_project(lib_dir, group_id, artifact_id, version)
+
+            # Compile before keeping the library
+            success, output = compile_library(lib_dir)
+            if success:
+                print(f"Compile success: {group_id}:{artifact_id}:{version}")
+            else:
+                print(f"Compile failed: {group_id}:{artifact_id}:{version}")
+                print(output.strip()[-3000:])
+                delete_library(lib_dir, "library does not compile")
 
     print("\nAll done!")
 
