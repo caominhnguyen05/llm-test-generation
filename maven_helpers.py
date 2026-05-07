@@ -40,7 +40,8 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
     command = [
         "mvn.cmd",
         "-q",
-        "compiler:testCompile",
+        "clean",
+        "test-compile",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
         f"-Dmaven.compiler.testIncludes=**/{test_class}.java",
@@ -56,7 +57,10 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
             timeout=MAVEN_TIMEOUT_SECONDS,
         )
 
+    print((result.stdout + result.stderr)[-2000:])
+
     if result.returncode == 0:
+        print(f"✅ {test_class} compiled successfully.")
         return True, ""
 
     error_output = result.stdout + "\n" + result.stderr
@@ -71,18 +75,20 @@ def run_maven_test_runtime(library_path: Path, test_class: str) -> tuple[bool, s
         "-q",
         "test",
         f"-Dtest={test_class}",
-        "-Dmaven.test.failure.ignore=true",
+        # "-Dmaven.test.failure.ignore=true",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
     ]
 
-    result = subprocess.run(
-        command,
-        cwd=library_path,
-        capture_output=True,
-        text=True,
-        timeout=MAVEN_TIMEOUT_SECONDS,
-    )
+    with only_test_class_visible(library_path, test_class):
+        result = subprocess.run(
+            command,
+            cwd=library_path,
+            capture_output=True,
+            text=True,
+            timeout=MAVEN_TIMEOUT_SECONDS,
+        )
 
     output = result.stdout + "\n" + result.stderr
+    print(output)
     return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]

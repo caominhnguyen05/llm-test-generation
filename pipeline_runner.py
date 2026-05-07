@@ -11,7 +11,7 @@ from validation import ValidationResult, validate_compile, validate_runtime, val
 def iter_library_sources(config: PipelineConfig) -> list[Path]:
     """Return all Java source files in a library."""
     if not config.source_root.exists():
-        print(f"Error: source root not found: {config.source_root}")
+        print(f"❌ Error: source root not found: {config.source_root}")
         return []
     ignored_files = {"package-info.java", "module-info.java"}
     return sorted(
@@ -24,10 +24,10 @@ def iter_library_sources(config: PipelineConfig) -> list[Path]:
 def validate_inputs(config: PipelineConfig) -> bool:
     """Check that the selected library and source file exist before running."""
     if not config.library_path.exists():
-        print(f"Error: library folder not found: {config.library_path}")
+        print(f"❌ Error: library folder not found: {config.library_path}")
         return False
     if not config.target_java_file.exists():
-        print(f"Error: source file not found: {config.target_java_file}")
+        print(f"❌ Error: source file not found: {config.target_java_file}")
         return False
     return True
 
@@ -38,7 +38,7 @@ def save_test_code(output_test_file: Path, test_code: str, class_name: str, labe
     if not syntax_result.passed:
         print(f"Quick syntax warnings before Maven: {syntax_result.message}")
     write_file(output_test_file, test_code)
-    print(f"{label} test saved to {output_test_file}")
+    print(f"💾 {label} test saved to {output_test_file}")
 
 
 def generate_initial_test(config: PipelineConfig, source_code: str, package_name: str, class_name: str) -> str:
@@ -47,7 +47,7 @@ def generate_initial_test(config: PipelineConfig, source_code: str, package_name
     The raw LLM response is normalized so the result is a complete Java test
     file with the expected package and class name.
     """
-    print(f"\n[Attempt 0] Asking Ollama ({config.model}) to generate tests...")
+    print(f"\n🤖 [Attempt 0] Asking Ollama ({config.model}) to generate tests...")
     llm_output = generate_llm_response(
         get_generation_prompt(source_code, package_name, class_name),
         config.model,
@@ -69,6 +69,7 @@ def generate_repair_test(
     validation error output so the model can fix syntax, compile, or runtime
     execution problems.
     """
+    print(f"🤖 Asking Ollama ({config.model}) to repair the test...")
     llm_output = generate_llm_response(
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
         config.model,
@@ -98,7 +99,7 @@ def validate_generated_test(config: PipelineConfig, test_code: str, test_class: 
     return ValidationResult(True, "complete", runtime_result.message)
 
 
-def run_pipeline(config: PipelineConfig) -> None:
+def run_pipeline(config: PipelineConfig) -> bool:
     """Generate, save, validate, and repair a test for one Java source file.
 
     The pipeline reads the target source file, asks the LLM for an initial test,
@@ -106,37 +107,40 @@ def run_pipeline(config: PipelineConfig) -> None:
     the test is valid or the configured repair limit is reached.
     """
     if not validate_inputs(config):
-        return
+        return False
 
     source_code = read_source_file(config.target_java_file)
     package_name, class_name = extract_package_and_class(config.target_java_file, config.source_root)
     test_class = f"{class_name}Test"
     output_test_file = config.test_root / package_name.replace(".", "/") / f"{test_class}.java"
 
-    print(f"Library: {config.library}")
-    print(f"Source: {config.target_java_file}")
-    print(f"Package: {package_name}")
-    print(f"Class: {class_name}")
-    print(f"Output: {output_test_file}")
+    print(f"  Library: {config.library}")
+    print(f"  Source: {config.target_java_file}")
+    print(f"  Package: {package_name}")
+    print(f"  Class: {class_name}")
+    print(f"  Output: {output_test_file}")
 
     test_code = generate_initial_test(config, source_code, package_name, class_name)
     save_test_code(output_test_file, test_code, class_name, "Initial")
 
     for attempt in range(config.attempts + 1):
+        print(f"\n🔍 Validating {test_class} on attempt {attempt}/{config.attempts}...")
         validation_result = validate_generated_test(config, test_code, test_class)
+
         if validation_result.passed:
-            print(f"SUCCESS: test is syntactically valid, compiles, and is executable on attempt {attempt}.")
-            return
+            print(f"✅ SUCCESS: {test_class} is syntactically valid, compiles, and is executable on attempt {attempt}.")
+            return True
 
         if attempt >= config.attempts:
-            print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
-            print(validation_result.message)
-            return
+            print(f"❌ FAILURE: max repair attempts ({config.attempts}) reached.")
+            print(f"❌ Validation failed for {test_class}: {validation_result.message}")
+            print("📌 Keeping generated test file as-is and continuing.")
+            return False
 
-        print(f"{validation_result.stage.title()} validation failed.")
-        print(validation_result.message)
-        print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
-        
+        print(f"❌ {validation_result.stage.title()} validation failed for {test_class}.")
+        print(f"🧾 Error: {validation_result.message}")
+        print(f"🔧 Starting repair loop {attempt + 1}/{config.attempts}...")
+
         test_code = generate_repair_test(
             config,
             test_code,
@@ -147,6 +151,8 @@ def run_pipeline(config: PipelineConfig) -> None:
         )
         save_test_code(output_test_file, test_code, class_name, "Repaired")
 
+    return False
+
 
 def run_library_pipeline(config: PipelineConfig) -> None:
     """Run the test-generation pipeline for every Java source file in a library.
@@ -156,22 +162,27 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     """
     sources = iter_library_sources(config)
     if not sources:
-        print(f"No Java source files found under {config.source_root}")
+        print(f"⚠️ No Java source files found under {config.source_root}")
         return
 
     failures: list[tuple[Path, str]] = []
     print(f"Found {len(sources)} Java source files in {config.library}.")
+
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
-            run_pipeline(replace(config, source=source))
+            succeeded = run_pipeline(replace(config, source=source))
+            if not succeeded:
+                failures.append((source, "validation failed after max repair attempts"))
         except Exception as exc:
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
             print(exc)
-            print("Keeping any generated test file as-is and continuing with the next class.")
+            print("📌 Keeping any generated test file as-is and continuing with the next class.")
 
     if failures:
         print(f"\nCompleted with {len(failures)} failed source file(s):")
         for source, message in failures:
-            print(f"- {source}: {message}")
+            print(f"❌ {source}: {message}")
+    else:
+        print("\n✅ Completed successfully with no failed source files.")
