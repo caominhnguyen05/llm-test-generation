@@ -135,12 +135,22 @@ def run_pipeline(config: PipelineConfig) -> bool:
     print(f"  Class: {class_name}")
     print(f"  Output: {output_test_file}")
 
-    test_code = generate_initial_test(config, source_code, package_name, class_name)
-    save_test_code(output_test_file, test_code, class_name, "Initial")
+    try:
+        test_code = generate_initial_test(config, source_code, package_name, class_name)
+        save_test_code(output_test_file, test_code, class_name, "Initial")
+    except Exception as exc:
+        print(f"Failed while generating {test_class}: {exc}")
+        delete_generated_test(output_test_file, f"generation exception: {exc}")
+        return False
 
     for attempt in range(config.attempts + 1):
         print(f"\n🔍 Validating {test_class} on attempt {attempt}/{config.attempts}...")
-        validation_result = validate_generated_test(config, test_code, test_class)
+        try:
+            validation_result = validate_generated_test(config, test_code, test_class)
+        except Exception as exc:
+            print(f"Failed while validating {test_class}: {exc}")
+            delete_generated_test(output_test_file, f"validation exception: {exc}")
+            return False
 
         if validation_result.passed:
             print(f"✅ SUCCESS: {test_class} is syntactically valid, compiles, and is executable on attempt {attempt}.")
@@ -149,22 +159,32 @@ def run_pipeline(config: PipelineConfig) -> bool:
         if attempt >= config.attempts:
             print(f"❌ FAILURE: max repair attempts ({config.attempts}) reached.")
             print(f"❌ Validation failed for {test_class}: {validation_result.message}")
-            print("📌 Keeping generated test file as-is and continuing.")
+            if validation_result.stage in {"compile", "syntax"}:
+                delete_generated_test(output_test_file, f"{validation_result.stage} validation failed")
+            else:
+                print(f"📌 Keeping generated test file as-is: {output_test_file}")
+
             return False
+
 
         print(f"❌ {validation_result.stage.title()} validation failed for {test_class}.")
         print(f"🧾 Error: {validation_result.message}")
         print(f"🔧 Starting repair loop {attempt + 1}/{config.attempts}...")
 
-        test_code = generate_repair_test(
-            config,
-            test_code,
-            validation_result,
-            source_code,
-            package_name,
-            class_name,
-        )
-        save_test_code(output_test_file, test_code, class_name, "Repaired")
+        try:
+            test_code = generate_repair_test(
+                config,
+                test_code,
+                validation_result,
+                source_code,
+                package_name,
+                class_name,
+            )
+            save_test_code(output_test_file, test_code, class_name, "Repaired")
+        except Exception as exc:
+            print(f"Failed while repairing {test_class}: {exc}")
+            delete_generated_test(output_test_file, f"repair exception: {exc}")
+            return False
 
     return False
 
@@ -201,3 +221,10 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             print(f"❌ {source}: {message}")
     else:
         print("\n✅ Completed successfully with no failed source files.")
+
+def delete_generated_test(output_test_file: Path, reason: str) -> None:
+    """Delete a generated test file that would break later Maven/JaCoCo runs."""
+    if output_test_file.exists():
+        output_test_file.unlink()
+        print(f"🗑️ Deleted generated test: {output_test_file}")
+        print(f"   Reason: {reason}")
