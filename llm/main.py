@@ -1,5 +1,5 @@
 from ollama import chat
-from config import SYSTEM_PROMPT
+from llm.config import SYSTEM_PROMPT
 
 
 def generate_llm_response(prompt: str, model: str) -> str:

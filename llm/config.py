@@ -21,6 +21,9 @@ Output only one complete Java test file inside a single ```java fenced code bloc
 analysis, markdown outside the code block, or partial snippets.
 """.strip()
 
+def available_model_names() -> list[str]:
+    return sorted(OLLAMA_MODELS)
+
 def get_model(name: str) -> str:
     if name not in OLLAMA_MODELS:
         raise ValueError(
