@@ -4,21 +4,31 @@ from pathlib import Path
 from llm.main import generate_llm_response, get_generation_prompt, get_repair_prompt
 from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
-from preprocess import extract_package_and_class, read_source_file
+from preprocess import assess_source_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
 
 
 def iter_library_sources(config: PipelineConfig) -> list[Path]:
-    """Return all Java source files in a library."""
+    """Return Java source files in a library that are likely worth testing."""
     if not config.source_root.exists():
         print(f"❌ Error: source root not found: {config.source_root}")
         return []
-    ignored_files = {"package-info.java", "module-info.java"}
-    return sorted(
-        path.relative_to(config.source_root)
-        for path in config.source_root.rglob("*.java")
-        if path.name not in ignored_files
-    )
+    selected_sources: list[Path] = []
+    skipped_sources: list[tuple[Path, str]] = []
+    for path in sorted(config.source_root.rglob("*.java")):
+        decision = assess_source_testability(path, config.source_root)
+        relative_path = path.relative_to(config.source_root)
+        if decision.testable:
+            selected_sources.append(relative_path)
+        else:
+            skipped_sources.append((relative_path, decision.reason))
+
+    if skipped_sources:
+        print(f"Preprocessing skipped {len(skipped_sources)} likely non-testable source file(s):")
+        for source, reason in skipped_sources:
+            print(f"- {source}: {reason}")
+
+    return selected_sources
 
 
 def validate_inputs(config: PipelineConfig) -> bool:
@@ -108,6 +118,11 @@ def run_pipeline(config: PipelineConfig) -> bool:
     """
     if not validate_inputs(config):
         return False
+
+    testability = assess_source_testability(config.target_java_file, config.source_root)
+    if not testability.testable:
+        print(f"Skipping {config.target_java_file}: {testability.reason}.")
+        return True
 
     source_code = read_source_file(config.target_java_file)
     package_name, class_name = extract_package_and_class(config.target_java_file, config.source_root)
