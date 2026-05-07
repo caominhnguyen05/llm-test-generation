@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from coverage.config import JACOCO_VERSION, FIELDNAMES, COUNTER_FIELDS
+from config import JACOCO_VERSION, FIELDNAMES, COUNTER_FIELDS
 
 
 @dataclass(frozen=True)
@@ -50,10 +50,13 @@ def run_jacoco(project_path: Path, timeout: int) -> tuple[bool, str]:
     command = [
         "mvn.cmd",
         "-q",
-        f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:prepare-agent",
+        "clean",
+        "jacoco:prepare-agent",
         "test",
-        f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:report",
+        "jacoco:report",
         "-Dmaven.test.failure.ignore=true",
+        "-Drat.skip=true",
+        "-Danimal.sniffer.skip=true",
     ]
 
     result = subprocess.run(
