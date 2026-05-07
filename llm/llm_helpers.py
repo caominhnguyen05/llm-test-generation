@@ -1,5 +1,5 @@
 from ollama import chat
-from pipeline_config import SYSTEM_PROMPT
+from config import SYSTEM_PROMPT
 
 
 def generate_llm_response(prompt: str, model: str) -> str:
@@ -52,7 +52,6 @@ def get_repair_prompt(
     source_code: str,
     package_name: str,
     class_name: str,
-    validation_stage: str,
 ) -> str:
     return f"""
     You are repairing a generated JUnit 4 test file.
