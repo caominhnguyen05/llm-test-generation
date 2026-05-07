@@ -2,18 +2,6 @@ import re
 from pathlib import Path
 
 
-def remove_license_comment(source_code: str) -> str:
-    """Remove a leading license comment if present to avoid LLM confusion."""
-    if source_code.strip().startswith("/*") and "*/" in source_code:
-        return source_code.split("*/", 1)[1].strip()
-    return source_code.strip()
-
-
-def read_file(path: Path) -> str:
-    with open(path, "r", encoding="utf-8") as file:
-        return remove_license_comment(file.read())
-
-
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as file:
@@ -32,24 +20,48 @@ def extract_java_code(llm_output: str) -> str:
     return llm_output.strip()
 
 
-def extract_package_and_class(java_file: Path, source_root: Path) -> tuple[str, str]:
-    rel_path = java_file.relative_to(source_root).with_suffix("")
-    return ".".join(rel_path.parts[:-1]), rel_path.parts[-1]
+def extract_imports(source_code: str) -> list[str]:
+    return [
+        line.strip()
+        for line in re.findall(
+            r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*$",
+            source_code,
+            flags=re.MULTILINE,
+        )
+    ]
 
 
 def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
-    imports = re.findall(r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*$", test_code, flags=re.MULTILINE)
-    code_without_imports = re.sub(
-        r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*\n?", "", test_code, flags=re.MULTILINE
+    imports = re.findall(
+        r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*$",
+        test_code,
+        flags=re.MULTILINE,
     )
-    return code_without_imports.strip(), [import_line.strip() for import_line in imports]
+
+    code_without_imports = re.sub(
+        r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*\n?",
+        "",
+        test_code,
+        flags=re.MULTILINE,
+    )
+
+    cleaned_imports = []
+    for import_line in imports:
+        import_line = import_line.strip()
+        if import_line.startswith("import org.junit.jupiter."):
+            continue
+        if import_line.startswith("import static org.junit.jupiter."):
+            continue
+        cleaned_imports.append(import_line)
+
+    return code_without_imports.strip(), cleaned_imports
 
 
 def strip_package_declarations(test_code: str) -> str:
     return re.sub(r"^\s*package\s+[\w.]+;\s*\n?", "", test_code, flags=re.MULTILINE).strip()
 
 
-def infer_missing_imports(test_code: str) -> set[str]:
+def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
     imports = {
         "import org.junit.Test;",
         "import static org.junit.Assert.*;",
@@ -61,8 +73,6 @@ def infer_missing_imports(test_code: str) -> set[str]:
         "@BeforeClass": "import org.junit.BeforeClass;",
         "@AfterClass": "import org.junit.AfterClass;",
         "@Rule": "import org.junit.Rule;",
-        "ExpectedException": "import org.junit.rules.ExpectedException;",
-        "TemporaryFolder": "import org.junit.rules.TemporaryFolder;",
     }
     for symbol, import_line in junit_symbols.items():
         if symbol in test_code:
@@ -71,6 +81,9 @@ def infer_missing_imports(test_code: str) -> set[str]:
     java_symbols = {
         "Arrays.": "import java.util.Arrays;",
         "Collections.": "import java.util.Collections;",
+        "Collection<": "import java.util.Collection;",
+        "Date": "import java.util.Date;",
+        "Comparator<": "import java.util.Comparator;",
         "List<": "import java.util.List;",
         "Map<": "import java.util.Map;",
         "Set<": "import java.util.Set;",
@@ -84,10 +97,11 @@ def infer_missing_imports(test_code: str) -> set[str]:
         if symbol in test_code:
             imports.add(import_line)
 
+    imports.update(extract_imports(source_code))
     return imports
 
 
-def normalize_test_code(test_code: str, package_name: str, class_name: str) -> str:
+def normalize_test_code(test_code: str, package_name: str, class_name: str, source_code: str = "") -> str:
     """Clean common LLM formatting issues and add imports needed by JUnit 4 tests."""
     test_code = extract_java_code(test_code)
     test_code = test_code.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -104,13 +118,37 @@ def normalize_test_code(test_code: str, package_name: str, class_name: str) -> s
     if not re.search(rf"\bclass\s+{re.escape(expected_class)}\b", test_code):
         raise ValueError(f"Generated code does not contain class {expected_class}.")
 
-    imports = set(existing_imports) | infer_missing_imports(test_code)
+    imports = set(existing_imports) | infer_missing_imports(test_code, source_code)
     imports_block = "\n".join(sorted(imports))
 
     return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
 
 
-def quick_syntax_check(test_code: str, class_name: str) -> list[str]:
+def apply_rule_based_repairs(
+    test_code: str,
+    error_message: str,
+    source_code: str,
+    package_name: str,
+) -> tuple[str, list[str]]:
+    repaired = test_code
+    applied_rules = []
+
+    if "cannot find symbol" in error_message:
+        repaired = add_focal_imports(repaired, source_code, package_name)
+        applied_rules.append("copied imports from focal class")
+
+    return repaired, applied_rules
+
+
+def add_focal_imports(test_code: str, source_code: str, package_name: str) -> str:
+    body, existing_imports = remove_existing_imports(test_code)
+    body = strip_package_declarations(body)
+    imports = sorted(set(existing_imports) | set(extract_imports(source_code)))
+    imports_block = "\n".join(imports)
+    return f"package {package_name};\n\n{imports_block}\n\n{body}"
+
+
+def test_class_syntax_check(test_code: str, class_name: str) -> list[str]:
     issues = []
     if f"public class {class_name}Test" not in test_code:
         issues.append(f"missing public class {class_name}Test declaration")

@@ -1,7 +1,37 @@
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from shutil import move
 
 from pipeline_config import ERROR_CONTEXT_CHARS, MAVEN_TIMEOUT_SECONDS
+
+
+@contextmanager
+def only_test_class_visible(library_path: Path, test_class: str):
+    test_root = library_path / "src/test/java"
+    if not test_root.exists():
+        yield
+        return
+
+    hidden_files: list[tuple[Path, Path]] = []
+    with tempfile.TemporaryDirectory(prefix=".pipeline-hidden-tests-", dir=library_path) as temp_dir:
+        temp_root = Path(temp_dir)
+        try:
+            for test_file in test_root.rglob("*Test.java"):
+                if test_file.stem == test_class:
+                    continue
+
+                hidden_file = temp_root / test_file.relative_to(test_root)
+                hidden_file.parent.mkdir(parents=True, exist_ok=True)
+                move(str(test_file), str(hidden_file))
+                hidden_files.append((hidden_file, test_file))
+            yield
+        finally:
+            for hidden_file, original_file in reversed(hidden_files):
+                original_file.parent.mkdir(parents=True, exist_ok=True)
+                if hidden_file.exists():
+                    move(str(hidden_file), str(original_file))
 
 
 def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, str]:
@@ -10,18 +40,21 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
     command = [
         "mvn.cmd",
         "-q",
-        "test-compile",
-        f"-Dtest={test_class}",
+        "compiler:testCompile",
+        "-Drat.skip=true",
+        "-Danimal.sniffer.skip=true",
+        f"-Dmaven.compiler.testIncludes=**/{test_class}.java",
     ]
 
 
-    result = subprocess.run(
-        command,
-        cwd=library_path,
-        capture_output=True,
-        text=True,
-        timeout=MAVEN_TIMEOUT_SECONDS,
-    )
+    with only_test_class_visible(library_path, test_class):
+        result = subprocess.run(
+            command,
+            cwd=library_path,
+            capture_output=True,
+            text=True,
+            timeout=MAVEN_TIMEOUT_SECONDS,
+        )
 
     if result.returncode == 0:
         return True, ""
@@ -30,14 +63,17 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
     return False, error_output[-ERROR_CONTEXT_CHARS:]
 
 
-def run_maven_test_ignore_failures(library_path: Path, test_class: str) -> tuple[bool, str]:
+def run_maven_test_runtime(library_path: Path, test_class: str) -> tuple[bool, str]:
     print(f"\nRunning Maven tests for {test_class}, ignoring assertion failures...")
+
     command = [
         "mvn.cmd",
         "-q",
         "test",
         f"-Dtest={test_class}",
         "-Dmaven.test.failure.ignore=true",
+        "-Drat.skip=true",
+        "-Danimal.sniffer.skip=true",
     ]
 
     result = subprocess.run(
@@ -49,4 +85,4 @@ def run_maven_test_ignore_failures(library_path: Path, test_class: str) -> tuple
     )
 
     output = result.stdout + "\n" + result.stderr
-    return True, output[-ERROR_CONTEXT_CHARS:]
+    return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]

@@ -3,8 +3,8 @@ from pathlib import Path
 
 from llm.main import generate_llm_response, get_generation_prompt, get_repair_prompt
 from pipeline_config import PipelineConfig
-from pipeline_utils import extract_package_and_class, normalize_test_code, read_file, write_file
-from repair_rules import apply_rule_based_repairs
+from postprocess import apply_rule_based_repairs, normalize_test_code, write_file
+from preprocess import extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
 
 
@@ -52,7 +52,7 @@ def generate_initial_test(config: PipelineConfig, source_code: str, package_name
         get_generation_prompt(source_code, package_name, class_name),
         config.model,
     )
-    return normalize_test_code(llm_output, package_name, class_name)
+    return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
 def generate_repair_test(
@@ -73,7 +73,7 @@ def generate_repair_test(
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
         config.model,
     )
-    return normalize_test_code(llm_output, package_name, class_name)
+    return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
 def validate_generated_test(config: PipelineConfig, test_code: str, test_class: str) -> ValidationResult:
@@ -108,7 +108,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     if not validate_inputs(config):
         return
 
-    source_code = read_file(config.target_java_file)
+    source_code = read_source_file(config.target_java_file)
     package_name, class_name = extract_package_and_class(config.target_java_file, config.source_root)
     test_class = f"{class_name}Test"
     output_test_file = config.test_root / package_name.replace(".", "/") / f"{test_class}.java"
@@ -144,7 +144,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         )
         if applied_rules:
             print(f"Applied rule-based repair: {', '.join(applied_rules)}")
-            test_code = normalize_test_code(repaired_code, package_name, class_name)
+            test_code = normalize_test_code(repaired_code, package_name, class_name, source_code)
         else:
             test_code = generate_repair_test(config, test_code, validation_result, source_code, package_name, class_name)
         save_test_code(output_test_file, test_code, class_name, "Repaired")
