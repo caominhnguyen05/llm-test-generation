@@ -21,6 +21,7 @@ def extract_java_code(llm_output: str) -> str:
 
 
 def extract_imports(source_code: str) -> list[str]:
+    """Extracts import statements from Java source code."""
     return [
         line.strip()
         for line in re.findall(
@@ -32,6 +33,7 @@ def extract_imports(source_code: str) -> list[str]:
 
 
 def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
+    """Removes existing import statements from the test code and returns them separately."""
     imports = re.findall(
         r"^\s*import\s+(?:static\s+)?[\w.*]+;\s*$",
         test_code,
@@ -48,6 +50,8 @@ def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
     cleaned_imports = []
     for import_line in imports:
         import_line = import_line.strip()
+
+        # Remove JUnit 5 imports
         if import_line.startswith("import org.junit.jupiter."):
             continue
         if import_line.startswith("import static org.junit.jupiter."):
@@ -72,7 +76,6 @@ def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
         "@After": "import org.junit.After;",
         "@BeforeClass": "import org.junit.BeforeClass;",
         "@AfterClass": "import org.junit.AfterClass;",
-        "@Rule": "import org.junit.Rule;",
     }
     for symbol, import_line in junit_symbols.items():
         if symbol in test_code:
@@ -122,30 +125,6 @@ def normalize_test_code(test_code: str, package_name: str, class_name: str, sour
     imports_block = "\n".join(sorted(imports))
 
     return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
-
-
-def apply_rule_based_repairs(
-    test_code: str,
-    error_message: str,
-    source_code: str,
-    package_name: str,
-) -> tuple[str, list[str]]:
-    repaired = test_code
-    applied_rules = []
-
-    if "cannot find symbol" in error_message:
-        repaired = add_focal_imports(repaired, source_code, package_name)
-        applied_rules.append("copied imports from focal class")
-
-    return repaired, applied_rules
-
-
-def add_focal_imports(test_code: str, source_code: str, package_name: str) -> str:
-    body, existing_imports = remove_existing_imports(test_code)
-    body = strip_package_declarations(body)
-    imports = sorted(set(existing_imports) | set(extract_imports(source_code)))
-    imports_block = "\n".join(imports)
-    return f"package {package_name};\n\n{imports_block}\n\n{body}"
 
 
 def test_class_syntax_check(test_code: str, class_name: str) -> list[str]:

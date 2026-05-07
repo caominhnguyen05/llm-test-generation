@@ -3,7 +3,7 @@ from pathlib import Path
 
 from llm.main import generate_llm_response, get_generation_prompt, get_repair_prompt
 from pipeline_config import PipelineConfig
-from postprocess import apply_rule_based_repairs, normalize_test_code, write_file
+from postprocess import normalize_test_code, write_file
 from preprocess import extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
 
@@ -125,7 +125,7 @@ def run_pipeline(config: PipelineConfig) -> None:
     for attempt in range(config.attempts + 1):
         validation_result = validate_generated_test(config, test_code, test_class)
         if validation_result.passed:
-            print(f"SUCCESS: test passed syntax, compile, and runtime validation on attempt {attempt}.")
+            print(f"SUCCESS: test is syntactically valid, compiles, and is executable on attempt {attempt}.")
             return
 
         if attempt >= config.attempts:
@@ -136,17 +136,15 @@ def run_pipeline(config: PipelineConfig) -> None:
         print(f"{validation_result.stage.title()} validation failed.")
         print(validation_result.message)
         print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
-        repaired_code, applied_rules = apply_rule_based_repairs(
+        
+        test_code = generate_repair_test(
+            config,
             test_code,
-            validation_result.message,
+            validation_result,
             source_code,
             package_name,
+            class_name,
         )
-        if applied_rules:
-            print(f"Applied rule-based repair: {', '.join(applied_rules)}")
-            test_code = normalize_test_code(repaired_code, package_name, class_name, source_code)
-        else:
-            test_code = generate_repair_test(config, test_code, validation_result, source_code, package_name, class_name)
         save_test_code(output_test_file, test_code, class_name, "Repaired")
 
 
