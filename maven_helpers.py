@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -75,7 +76,7 @@ def run_maven_test_runtime(library_path: Path, test_class: str) -> tuple[bool, s
         "-q",
         "test",
         f"-Dtest={test_class}",
-        # "-Dmaven.test.failure.ignore=true",
+        "-Dmaven.test.failure.ignore=true",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
     ]
@@ -91,4 +92,8 @@ def run_maven_test_runtime(library_path: Path, test_class: str) -> tuple[bool, s
 
     output = result.stdout + "\n" + result.stderr
     print(output)
-    return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]
+    has_test_errors = any(
+        int(match.group(1)) > 0
+        for match in re.finditer(r"Errors:\s*(\d+)", output)
+    )
+    return result.returncode == 0 and not has_test_errors, output[-ERROR_CONTEXT_CHARS:]
