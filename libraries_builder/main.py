@@ -5,10 +5,8 @@ import zipfile
 import shutil
 import xml.etree.ElementTree as ET
 
-# =========================
-# CONFIG
-# =========================
-CSV_FILE = "evosuite_results_small_copy.csv"
+
+CSV_FILE = "csv_data/evosuite_results_small.csv"
 OUTPUT_DIR = Path("libraries_small")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
