@@ -51,6 +51,12 @@ def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
     for import_line in imports:
         import_line = import_line.strip()
 
+        # Remove JUnit 3 imports
+        if import_line.startswith("import junit.framework."):
+            continue
+        if import_line.startswith("import static junit.framework."):
+            continue
+
         # Remove JUnit 5 imports
         if import_line.startswith("import org.junit.jupiter."):
             continue
