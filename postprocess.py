@@ -8,15 +8,42 @@ def write_file(path: Path, content: str) -> None:
         file.write(content.rstrip() + "\n")
 
 
-def extract_java_code(llm_output: str) -> str:
-    java_block = re.search(r"```java\s*(.*?)```", llm_output, flags=re.DOTALL | re.IGNORECASE)
-    if java_block:
-        return java_block.group(1).strip()
+def contains_class_declaration(source_code: str, class_name: str) -> bool:
+    return bool(re.search(rf"\bclass\s+{re.escape(class_name)}\b", source_code))
 
-    generic_block = re.search(r"```\s*(.*?)```", llm_output, flags=re.DOTALL)
-    if generic_block:
-        return generic_block.group(1).strip()
 
+def extract_java_code(llm_output: str, expected_class: str | None = None) -> str:
+    """Extract the generated Java test class from an LLM response.
+
+    LLM repair responses often contain small fenced Java snippets before the
+    complete test class. When an expected class is known, prefer the fenced
+    block that actually declares that class instead of blindly taking the first
+    ```java block.
+    """
+    java_blocks = [
+        match.group(1).strip()
+        for match in re.finditer(r"```java\s*(.*?)```", llm_output, flags=re.DOTALL | re.IGNORECASE)
+    ]
+    generic_blocks = [
+        match.group(1).strip()
+        for match in re.finditer(r"```\s*(.*?)```", llm_output, flags=re.DOTALL)
+    ]
+
+    if expected_class:
+        for block in java_blocks:
+            if contains_class_declaration(block, expected_class):
+                return block
+        for block in generic_blocks:
+            if contains_class_declaration(block, expected_class):
+                return block
+        if contains_class_declaration(llm_output, expected_class):
+            return llm_output.strip()
+        raise ValueError(f"Generated code does not contain class {expected_class}.")
+
+    if java_blocks:
+        return java_blocks[0]
+    if generic_blocks:
+        return generic_blocks[0]
     return llm_output.strip()
 
 
@@ -112,12 +139,12 @@ def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
 
 def normalize_test_code(test_code: str, package_name: str, class_name: str, source_code: str = "") -> str:
     """Clean common LLM formatting issues and add imports needed by JUnit 4 tests."""
-    test_code = extract_java_code(test_code)
+    expected_class = f"{class_name}Test"
+    test_code = extract_java_code(test_code, expected_class)
     test_code = test_code.replace("\r\n", "\n").replace("\r", "\n").strip()
     test_code, existing_imports = remove_existing_imports(test_code)
     test_code = strip_package_declarations(test_code)
 
-    expected_class = f"{class_name}Test"
     test_code = re.sub(
         r"\bpublic\s+class\s+\w+\b",
         f"public class {expected_class}",
