@@ -385,7 +385,17 @@ def main():
             else:
                 print(f"Compile failed: {group_id}:{artifact_id}:{version}")
                 print(output.strip()[-4000:])
-                delete_library(lib_dir, "library does not compile")
+
+                print(f"Retrying with minimal pom.xml: {group_id}:{artifact_id}:{version}")
+                create_minimal_pom(lib_dir / "pom.xml", group_id, artifact_id, version)
+
+                success, output = compile_library(lib_dir)
+                if success:
+                    print(f"Compile success with minimal pom.xml: {group_id}:{artifact_id}:{version}")
+                else:
+                    print(f"Compile failed with minimal pom.xml: {group_id}:{artifact_id}:{version}")
+                    print(output.strip()[-4000:])
+                    delete_library(lib_dir, "library does not compile")
 
     print("\nAll done!")
 
