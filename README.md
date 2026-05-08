@@ -2,7 +2,41 @@
 
 ## How to Run the Pipeline
 
-### 1. Download libraries and construct Maven projects
+### 1. Create virtual environments & install dependencies
+
+Create virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Activate virtual environment:
+
+- Windows (Command Prompt)
+
+```cmd
+.venv\Scripts\activate
+```
+
+- Windows (PowerShell)
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+- macOS/Linux
+
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Download libraries and construct Maven projects
 
 Run:
 
@@ -21,7 +55,7 @@ For each row, it:
 - Compiles the generated Maven project.
 - Keeps only libraries that compile successfully.
 
-### 2. Run the LLM test-generation pipeline
+### 3. Run the LLM test-generation pipeline
 
 This step generates JUnit 4 tests for a selected Maven library, validates them with Maven, repairs failing tests using the LLM, and records JaCoCo coverage.
 
@@ -38,7 +72,7 @@ Then choose a mode:
 
 Available arguments:
 
-```
+```text
 --library         Maven coordinates of the target library.
                   Example: org.apache.commons:commons-csv:1.8
 
