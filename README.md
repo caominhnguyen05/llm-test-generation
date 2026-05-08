@@ -1,0 +1,87 @@
+# LLM-based test generation pipeline
+
+## How to Run the Pipeline
+
+### 1. Download libraries and construct Maven projects
+
+Run:
+
+```bash
+python libraries_builder/download.py
+```
+
+This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`.
+
+For each row, it:
+
+- Downloads the -sources.jar from Maven Central.
+- Extracts Java source files into src/main/java.
+- Downloads the artifact pom.xml.
+- Adds the required JUnit, Mockito, Surefire, and JaCoCo configuration.
+- Compiles the generated Maven project.
+- Keeps only libraries that compile successfully.
+
+### 2. Run the LLM test-generation pipeline
+
+This step generates JUnit 4 tests for a selected Maven library, validates them with Maven, repairs failing tests using the LLM, and records JaCoCo coverage.
+
+Run:
+
+python main.py --library <group_id>:<artifact_id>:<version>
+
+Then choose a mode:
+
+1. Run all Java classes in the selected library
+2. Run one Java class in the selected library
+
+Available arguments:
+
+```
+--library         Maven coordinates of the target library.
+                  Example: org.apache.commons:commons-csv:1.8
+
+--libraries-root  Root folder containing downloaded libraries.
+                  Default: libraries_initial
+
+--source          Java file relative to src/main/java.
+                  Only needed when running one class.
+                  Example: org/apache/commons/csv/CSVParser.java
+
+--model           Ollama model preset to use.
+                  Default: qwen_coder_small
+
+--attempts        Maximum number of repair attempts after a generated test fails.
+                  Default: 2
+```
+
+Example: run all classes in a library:
+
+```
+python main.py --library org.apache.commons:commons-csv:1.8
+```
+
+Example: run one class:
+
+```
+python main.py --library org.apache.commons:commons-csv:1.8 --source org/apache/commons/csv/CSVParser.java
+```
+
+Example: use a different model and repair limit:
+
+```
+python main.py --library org.apache.commons:commons-csv:1.8 --model qwen_coder_small --attempts 3
+```
+
+To see all options:
+
+```
+python main.py --help
+```
+
+Generated tests are written to:
+
+`<library>/src/test/java/`
+
+Coverage results are appended to:
+
+`csv_data/llm_coverage.csv`

@@ -1,0 +1,2 @@
+group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,tests_passed,tests_total,percentage_passed,jacoco_success
+org.apache.commons,commons-csv,1.8,LLM,5.09,2.58,5.77,4.33,8.72,33.33,27,31,87.10,true

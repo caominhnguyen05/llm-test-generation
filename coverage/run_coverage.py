@@ -128,6 +128,16 @@ def write_rows(rows: list[dict[str, str]], output_path: str | None) -> None:
     writer.writerows(rows)
 
 
+def append_row(row: dict[str, str], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    should_write_header = not output_path.exists() or output_path.stat().st_size == 0
+    with open(output_path, "a", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
+        if should_write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
 def _coverage_percent(counter_attributes: dict[str, str]) -> str:
     missed = int(counter_attributes.get("missed", "0"))
     covered = int(counter_attributes.get("covered", "0"))

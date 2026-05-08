@@ -1,3 +1,4 @@
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -6,6 +7,15 @@ from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
 from preprocess import assess_source_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
+
+REPO_ROOT = Path(__file__).resolve().parent
+COVERAGE_DIR = REPO_ROOT / "coverage"
+if str(COVERAGE_DIR) not in sys.path:
+    sys.path.insert(0, str(COVERAGE_DIR))
+
+from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_jacoco
+
+LLM_COVERAGE_CSV = REPO_ROOT / "csv_data/llm_coverage.csv"
 
 
 def iter_library_sources(config: PipelineConfig) -> list[Path]:
@@ -221,6 +231,18 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             print(f"❌ {source}: {message}")
     else:
         print("\n✅ Completed successfully with no failed source files.")
+
+    append_library_coverage(config)
+
+
+def append_library_coverage(config: PipelineConfig) -> None:
+    """Run JaCoCo once for the completed library and append its coverage row."""
+    print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
+    project = read_maven_project(config.library_path)
+    jacoco_success, maven_output = run_jacoco(project.path, 300)
+    append_row(read_coverage(project, jacoco_success, maven_output), LLM_COVERAGE_CSV)
+    print(f"Coverage row appended to {LLM_COVERAGE_CSV}")
+
 
 def delete_generated_test(output_test_file: Path, reason: str) -> None:
     """Delete a generated test file that would break later Maven/JaCoCo runs."""
