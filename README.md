@@ -48,9 +48,9 @@ This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`.
 
 For each row, it:
 
-- Downloads the -sources.jar from Maven Central.
-- Extracts Java source files into src/main/java.
-- Downloads the artifact pom.xml.
+- Downloads the `-sources.jar` from Maven Central.
+- Extracts Java source files into `src/main/java`.
+- Downloads the artifact `pom.xml`.
 - Adds the required JUnit, Mockito, Surefire, and JaCoCo configuration.
 - Compiles the generated Maven project.
 - Keeps only libraries that compile successfully.
@@ -129,4 +129,4 @@ pip install streamlit
 streamlit run streamlit_app.py
 ```
 
-The page will then be available at `http://localhost:8501`.
+The UI page will then be available at `http://localhost:8501`.
