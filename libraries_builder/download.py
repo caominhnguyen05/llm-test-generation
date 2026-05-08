@@ -8,15 +8,16 @@ import xml.etree.ElementTree as ET
 
 
 CSV_FILE = "csv_data/evosuite_results_small.csv"
-OUTPUT_DIR = Path("libraries_small")
+OUTPUT_DIR = Path("libraries_initial")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
+JAVA_VERSION = "8"
 ET.register_namespace("", POM_NS)
 
 # =========================
 # HELPERS
 # =========================
-def build_url(group_id, artifact_id, version):
+def build_source_url(group_id, artifact_id, version):
     group_path = group_id.replace(".", "/")
     filename = f"{artifact_id}-{version}-sources.jar"
     url = f"{MAVEN_CENTRAL}/{group_path}/{artifact_id}/{version}/{filename}"
@@ -58,16 +59,11 @@ def extract_jar(jar_path, extract_to):
 def pom_tag(name):
     return f"{{{POM_NS}}}{name}"
 
-def find_extracted_pom(extracted_src):
-    maven_poms = list(extracted_src.glob("META-INF/maven/**/pom.xml"))
-    if maven_poms:
-        return maven_poms[0]
-
-    poms = list(extracted_src.rglob("pom.xml"))
-    return poms[0] if poms else None
-
 def child(parent, name):
     return parent.find(pom_tag(name))
+
+def children(parent, name):
+    return parent.findall(pom_tag(name))
 
 def get_or_create_child(parent, name):
     existing = child(parent, name)
@@ -77,55 +73,153 @@ def get_or_create_child(parent, name):
     created = ET.SubElement(parent, pom_tag(name))
     return created
 
-def has_dependency(dependencies, group_id, artifact_id):
+def inserted_comment():
+    return ET.Comment(" This element was inserted by download.py ")
+
+def dependency_matches(dependency, group_id, artifact_id):
+    group = child(dependency, "groupId")
+    artifact = child(dependency, "artifactId")
+    return group is not None and artifact is not None and group.text == group_id and artifact.text == artifact_id
+
+def find_dependency(dependencies, group_id, artifact_id):
     for dependency in dependencies.findall(pom_tag("dependency")):
-        group = child(dependency, "groupId")
-        artifact = child(dependency, "artifactId")
-        if group is not None and artifact is not None:
-            if group.text == group_id and artifact.text == artifact_id:
-                return True
-    return False
+        if dependency_matches(dependency, group_id, artifact_id):
+            return dependency
+    return None
+
+def has_dependency(dependencies, group_id, artifact_id):
+    return find_dependency(dependencies, group_id, artifact_id) is not None
+
+def add_or_update_dependency(dependencies, group_id, artifact_id, version, scope="test"):
+    dependency = find_dependency(dependencies, group_id, artifact_id)
+    if dependency is None:
+        dependencies.append(inserted_comment())
+        dependency = ET.SubElement(dependencies, pom_tag("dependency"))
+        ET.SubElement(dependency, pom_tag("groupId")).text = group_id
+        ET.SubElement(dependency, pom_tag("artifactId")).text = artifact_id
+
+    set_text_child(dependency, "version", version)
+    set_text_child(dependency, "scope", scope)
 
 def add_dependency(dependencies, group_id, artifact_id, version, scope="test"):
-    if has_dependency(dependencies, group_id, artifact_id):
-        return
+    add_or_update_dependency(dependencies, group_id, artifact_id, version, scope)
 
-    dependency = ET.SubElement(dependencies, pom_tag("dependency"))
-    ET.SubElement(dependency, pom_tag("groupId")).text = group_id
-    ET.SubElement(dependency, pom_tag("artifactId")).text = artifact_id
-    ET.SubElement(dependency, pom_tag("version")).text = version
-    ET.SubElement(dependency, pom_tag("scope")).text = scope
+def plugin_matches(plugin, group_id, artifact_id):
+    group = child(plugin, "groupId")
+    artifact = child(plugin, "artifactId")
+    if artifact is None or artifact.text != artifact_id:
+        return False
+    if group is None or not group.text:
+        return group_id == "org.apache.maven.plugins"
+    return group.text == group_id
+
+def find_plugin(plugins, group_id, artifact_id):
+    for plugin in plugins.findall(pom_tag("plugin")):
+        if plugin_matches(plugin, group_id, artifact_id):
+            return plugin
+    return None
 
 def has_plugin(plugins, group_id, artifact_id):
-    for plugin in plugins.findall(pom_tag("plugin")):
-        group = child(plugin, "groupId")
-        artifact = child(plugin, "artifactId")
-        if group is not None and artifact is not None:
-            if group.text == group_id and artifact.text == artifact_id:
-                return True
-    return False
+    return find_plugin(plugins, group_id, artifact_id) is not None
 
-def add_jacoco_plugin(plugins):
-    group_id = "org.jacoco"
-    artifact_id = "jacoco-maven-plugin"
-    if has_plugin(plugins, group_id, artifact_id):
-        return
+def get_or_create_plugin(plugins, group_id, artifact_id):
+    plugin = find_plugin(plugins, group_id, artifact_id)
+    if plugin is None:
+        plugins.append(inserted_comment())
+        plugin = ET.SubElement(plugins, pom_tag("plugin"))
+    set_text_child(plugin, "groupId", group_id)
+    set_text_child(plugin, "artifactId", artifact_id)
+    return plugin
 
-    plugin = ET.SubElement(plugins, pom_tag("plugin"))
-    ET.SubElement(plugin, pom_tag("groupId")).text = group_id
-    ET.SubElement(plugin, pom_tag("artifactId")).text = artifact_id
-    ET.SubElement(plugin, pom_tag("version")).text = "0.8.12"
+def remove_children(parent, name):
+    for elem in children(parent, name):
+        parent.remove(elem)
+
+def set_plugin_version(plugin, version):
+    set_text_child(plugin, "version", version)
+
+def configure_compiler_plugin(plugins):
+    plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-compiler-plugin")
+    set_plugin_version(plugin, "3.11.0")
+    configuration = get_or_create_child(plugin, "configuration")
+    set_text_child(configuration, "source", JAVA_VERSION)
+    set_text_child(configuration, "target", JAVA_VERSION)
+    set_text_child(configuration, "encoding", "UTF-8")
+
+def configure_existing_compiler_plugins(root):
+    for plugin in root.iter(pom_tag("plugin")):
+        if plugin_matches(plugin, "org.apache.maven.plugins", "maven-compiler-plugin"):
+            set_plugin_version(plugin, "3.11.0")
+            configuration = get_or_create_child(plugin, "configuration")
+            set_text_child(configuration, "source", JAVA_VERSION)
+            set_text_child(configuration, "target", JAVA_VERSION)
+            set_text_child(configuration, "encoding", "UTF-8")
+
+def configure_surefire_plugin(plugins):
+    plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-surefire-plugin")
+    set_plugin_version(plugin, "3.2.5")
+    remove_children(plugin, "configuration")
+    remove_children(plugin, "dependencies")
+
+    configuration = ET.SubElement(plugin, pom_tag("configuration"))
+    ET.SubElement(configuration, pom_tag("argLine")).text = "@{jacoco.argLine}"
+    includes = ET.SubElement(configuration, pom_tag("includes"))
+    ET.SubElement(includes, pom_tag("include")).text = "**/*Test.java"
+
+    dependencies = ET.SubElement(plugin, pom_tag("dependencies"))
+    dependency = ET.SubElement(dependencies, pom_tag("dependency"))
+    ET.SubElement(dependency, pom_tag("groupId")).text = "org.apache.maven.surefire"
+    ET.SubElement(dependency, pom_tag("artifactId")).text = "surefire-junit4"
+    ET.SubElement(dependency, pom_tag("version")).text = "3.2.5"
+
+def configure_jacoco_plugin(plugins):
+    plugin = get_or_create_plugin(plugins, "org.jacoco", "jacoco-maven-plugin")
+    set_plugin_version(plugin, "0.8.12")
+    remove_children(plugin, "configuration")
+    remove_children(plugin, "executions")
+
+    configuration = ET.SubElement(plugin, pom_tag("configuration"))
+    ET.SubElement(configuration, pom_tag("propertyName")).text = "jacoco.argLine"
+    excludes = ET.SubElement(configuration, pom_tag("excludes"))
+    ET.SubElement(excludes, pom_tag("exclude")).text = "META-INF/versions/**"
 
     executions = ET.SubElement(plugin, pom_tag("executions"))
     prepare_agent = ET.SubElement(executions, pom_tag("execution"))
+    ET.SubElement(prepare_agent, pom_tag("id")).text = "prepare-agent"
     goals = ET.SubElement(prepare_agent, pom_tag("goals"))
     ET.SubElement(goals, pom_tag("goal")).text = "prepare-agent"
 
     report = ET.SubElement(executions, pom_tag("execution"))
     ET.SubElement(report, pom_tag("id")).text = "report"
-    ET.SubElement(report, pom_tag("phase")).text = "test"
+    ET.SubElement(report, pom_tag("phase")).text = "verify"
     report_goals = ET.SubElement(report, pom_tag("goals"))
     ET.SubElement(report_goals, pom_tag("goal")).text = "report"
+
+
+def normalize_generated_test_pom(root):
+    properties = get_or_create_child(root, "properties")
+    set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
+    set_text_child(properties, "jacoco.argLine", "")
+
+    # Prevent old libraries from using source/target values unsupported by modern JDKs.
+    set_text_child(properties, "maven.compiler.source", JAVA_VERSION)
+    set_text_child(properties, "maven.compiler.target", JAVA_VERSION)
+    set_text_child(properties, "maven.compile.source", JAVA_VERSION)
+    set_text_child(properties, "maven.compile.target", JAVA_VERSION)
+
+    dependencies = get_or_create_child(root, "dependencies")
+    add_or_update_dependency(dependencies, "junit", "junit", "4.13.2")
+    add_or_update_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
+
+    build = get_or_create_child(root, "build")
+    plugins = get_or_create_child(build, "plugins")
+    configure_compiler_plugin(plugins)
+    configure_surefire_plugin(plugins)
+    configure_jacoco_plugin(plugins)
+    configure_existing_compiler_plugins(root)
+
+def add_jacoco_plugin(plugins):
+    configure_jacoco_plugin(plugins)
 
 def set_text_child(parent, name, text):
     elem = get_or_create_child(parent, name)
@@ -149,33 +243,7 @@ def create_minimal_pom(target_pom, group_id, artifact_id, version):
     ET.SubElement(project, pom_tag("version")).text = version
     ET.SubElement(project, pom_tag("packaging")).text = "jar"
 
-    properties = ET.SubElement(project, pom_tag("properties"))
-    ET.SubElement(properties, pom_tag("maven.compiler.source")).text = "8"
-    ET.SubElement(properties, pom_tag("maven.compiler.target")).text = "8"
-    ET.SubElement(properties, pom_tag("project.build.sourceEncoding")).text = "UTF-8"
-
-    dependencies = ET.SubElement(project, pom_tag("dependencies"))
-    add_dependency(dependencies, "junit", "junit", "4.13.2")
-    add_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
-
-    build = ET.SubElement(project, pom_tag("build"))
-    plugins = ET.SubElement(build, pom_tag("plugins"))
-
-    compiler = ET.SubElement(plugins, pom_tag("plugin"))
-    ET.SubElement(compiler, pom_tag("groupId")).text = "org.apache.maven.plugins"
-    ET.SubElement(compiler, pom_tag("artifactId")).text = "maven-compiler-plugin"
-    ET.SubElement(compiler, pom_tag("version")).text = "3.11.0"
-
-    configuration = ET.SubElement(compiler, pom_tag("configuration"))
-    ET.SubElement(configuration, pom_tag("source")).text = "8"
-    ET.SubElement(configuration, pom_tag("target")).text = "8"
-
-    surefire = ET.SubElement(plugins, pom_tag("plugin"))
-    ET.SubElement(surefire, pom_tag("groupId")).text = "org.apache.maven.plugins"
-    ET.SubElement(surefire, pom_tag("artifactId")).text = "maven-surefire-plugin"
-    ET.SubElement(surefire, pom_tag("version")).text = "3.2.5"
-
-    add_jacoco_plugin(plugins)
+    normalize_generated_test_pom(project)
 
     tree = ET.ElementTree(project)
     ET.indent(tree, space="    ")
@@ -209,35 +277,7 @@ def prepare_pom(base_dir, group_id, artifact_id, version):
     if packaging is None:
         set_text_child(root, "packaging", "jar")
 
-    properties = get_or_create_child(root, "properties")
-    set_text_child(properties, "maven.compiler.source", "8")
-    set_text_child(properties, "maven.compiler.target", "8")
-    set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
-
-    dependencies = get_or_create_child(root, "dependencies")
-    add_dependency(dependencies, "junit", "junit", "4.13.2")
-    add_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
-
-    build = get_or_create_child(root, "build")
-    plugins = get_or_create_child(build, "plugins")
-
-    add_jacoco_plugin(plugins)
-
-    if not has_plugin(plugins, "org.apache.maven.plugins", "maven-compiler-plugin"):
-        compiler = ET.SubElement(plugins, pom_tag("plugin"))
-        ET.SubElement(compiler, pom_tag("groupId")).text = "org.apache.maven.plugins"
-        ET.SubElement(compiler, pom_tag("artifactId")).text = "maven-compiler-plugin"
-        ET.SubElement(compiler, pom_tag("version")).text = "3.11.0"
-
-        configuration = ET.SubElement(compiler, pom_tag("configuration"))
-        ET.SubElement(configuration, pom_tag("source")).text = "8"
-        ET.SubElement(configuration, pom_tag("target")).text = "8"
-
-    if not has_plugin(plugins, "org.apache.maven.plugins", "maven-surefire-plugin"):
-        surefire = ET.SubElement(plugins, pom_tag("plugin"))
-        ET.SubElement(surefire, pom_tag("groupId")).text = "org.apache.maven.plugins"
-        ET.SubElement(surefire, pom_tag("artifactId")).text = "maven-surefire-plugin"
-        ET.SubElement(surefire, pom_tag("version")).text = "3.2.5"
+    normalize_generated_test_pom(root)
 
     ET.indent(tree, space="    ")
     tree.write(target_pom, encoding="utf-8", xml_declaration=True)
@@ -256,11 +296,14 @@ def create_maven_project(base_dir, group_id, artifact_id, version):
 
     prepare_pom(base_dir, group_id, artifact_id, version)
 
+    if extracted_src.exists():
+        shutil.rmtree(extracted_src)
+
 def compile_library(base_dir: Path) -> tuple[bool, str]:
     command = [
         "mvn.cmd",
         "-q",
-        "compile",
+        "test-compile",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
     ]
@@ -296,10 +339,10 @@ def main():
 
             print(f"\nProcessing: {group_id}:{artifact_id}:{version}")
 
-            url, filename = build_url(group_id, artifact_id, version)
+            url, filename = build_source_url(group_id, artifact_id, version)
 
-            lib_dir = OUTPUT_DIR / f"{artifact_id}-{version}"
-            lib_dir.mkdir(exist_ok=True)
+            lib_dir = OUTPUT_DIR / group_id / artifact_id / version
+            lib_dir.mkdir(parents=True, exist_ok=True)
 
             jar_path = lib_dir / filename
 
@@ -312,6 +355,7 @@ def main():
                 print(f"Downloaded: {group_id}:{artifact_id}:{version}")
             else:
                 print(f"Already downloaded: {group_id}:{artifact_id}:{version}")
+                # continue
 
             # Extract
             extract_dir = lib_dir / "extracted"
@@ -331,7 +375,7 @@ def main():
                 print(f"Compile success: {group_id}:{artifact_id}:{version}")
             else:
                 print(f"Compile failed: {group_id}:{artifact_id}:{version}")
-                print(output.strip()[-3000:])
+                print(output.strip()[-4000:])
                 delete_library(lib_dir, "library does not compile")
 
     print("\nAll done!")
