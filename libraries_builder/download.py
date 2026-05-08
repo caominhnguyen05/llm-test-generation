@@ -144,7 +144,7 @@ def configure_compiler_plugin(plugins):
     configuration = get_or_create_child(plugin, "configuration")
     set_text_child(configuration, "source", JAVA_VERSION)
     set_text_child(configuration, "target", JAVA_VERSION)
-    set_text_child(configuration, "encoding", "UTF-8")
+    # set_text_child(configuration, "encoding", "UTF-8")
 
 def configure_existing_compiler_plugins(root):
     for plugin in root.iter(pom_tag("plugin")):
@@ -153,7 +153,7 @@ def configure_existing_compiler_plugins(root):
             configuration = get_or_create_child(plugin, "configuration")
             set_text_child(configuration, "source", JAVA_VERSION)
             set_text_child(configuration, "target", JAVA_VERSION)
-            set_text_child(configuration, "encoding", "UTF-8")
+            # set_text_child(configuration, "encoding", "UTF-8")
 
 def configure_surefire_plugin(plugins):
     plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-surefire-plugin")
@@ -198,7 +198,7 @@ def configure_jacoco_plugin(plugins):
 
 def normalize_generated_test_pom(root):
     properties = get_or_create_child(root, "properties")
-    set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
+    # set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
     set_text_child(properties, "jacoco.argLine", "")
 
     # Prevent old libraries from using source/target values unsupported by modern JDKs.
@@ -322,6 +322,16 @@ def delete_library(lib_dir: Path, reason: str) -> None:
         shutil.rmtree(lib_dir)
         print(f"Deleted {lib_dir}: {reason}")
 
+def delete_downloaded_jar(jar_path: Path) -> None:
+    if jar_path.exists():
+        jar_path.unlink()
+
+def library_already_prepared(lib_dir: Path) -> bool:
+    return (
+        (lib_dir / "pom.xml").exists()
+        and (lib_dir / "src/main/java").exists()
+    )
+
 # =========================
 # MAIN
 # =========================
@@ -344,32 +354,31 @@ def main():
             lib_dir = OUTPUT_DIR / group_id / artifact_id / version
             lib_dir.mkdir(parents=True, exist_ok=True)
 
+            if library_already_prepared(lib_dir):
+                print(f"Already prepared: {group_id}:{artifact_id}:{version}")
+                continue
+
             jar_path = lib_dir / filename
 
-            # Download
-            if not jar_path.exists():
-                success = download_file(url, jar_path)
-                if not success:
-                    delete_library(lib_dir, "source jar download failed")
-                    continue
-                print(f"Downloaded: {group_id}:{artifact_id}:{version}")
-            else:
-                print(f"Already downloaded: {group_id}:{artifact_id}:{version}")
-                # continue
+            success = download_file(url, jar_path)
+            if not success:
+                delete_library(lib_dir, "source jar download failed")
+                continue
 
-            # Extract
+            print(f"Downloaded: {group_id}:{artifact_id}:{version}")
+
             extract_dir = lib_dir / "extracted"
-            if not extract_dir.exists():
-                extract_dir.mkdir()
-                ok = extract_jar(jar_path, extract_dir)
-                if not ok:
-                    delete_library(lib_dir, "source jar extraction failed")
-                    continue
+            extract_dir.mkdir(exist_ok=True)
 
-            # Create Maven project
+            ok = extract_jar(jar_path, extract_dir)
+            if not ok:
+                delete_library(lib_dir, "source jar extraction failed")
+                continue
+
+            delete_downloaded_jar(jar_path)
+
             create_maven_project(lib_dir, group_id, artifact_id, version)
 
-            # Compile before keeping the library
             success, output = compile_library(lib_dir)
             if success:
                 print(f"Compile success: {group_id}:{artifact_id}:{version}")
