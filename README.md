@@ -44,7 +44,7 @@ Run:
 python libraries_builder/download.py
 ```
 
-This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`.
+This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`, a sample with 20+ libraries used in EvoSuite baseline.
 
 For each row, it:
 
