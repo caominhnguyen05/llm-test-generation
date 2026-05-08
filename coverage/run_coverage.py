@@ -25,6 +25,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def find_maven_projects(root: Path) -> list[Path]:
+    if (root / "pom.xml").exists():
+        return [root]
     return sorted(path for path in root.iterdir() if path.is_dir() and (path / "pom.xml").exists())
 
 

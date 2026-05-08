@@ -6,8 +6,8 @@ from llm.config import get_model, available_model_names
 
 
 DEFAULT_OLLAMA_MODEL_NAME = "qwen_coder_small"
-DEFAULT_LIBRARIES_ROOT = Path("libraries_small")
-DEFAULT_TARGET_LIBRARY = "commons-cli-1.2"
+DEFAULT_LIBRARIES_ROOT = Path("libraries_initial")
+DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 DEFAULT_TARGET_SOURCE_RELATIVE_PATH = Path("org/apache/commons/cli/AlreadySelectedException.java")
 
 DEFAULT_MAX_REPAIR_ATTEMPTS = 2
@@ -25,7 +25,7 @@ class PipelineConfig:
 
     @property
     def library_path(self) -> Path:
-        return self.libraries_root / self.library
+        return resolve_library_path(self.libraries_root, self.library)
 
     @property
     def source_root(self) -> Path:
@@ -42,9 +42,21 @@ class PipelineConfig:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate and repair JUnit 4 tests for Java classes in libraries_small."
+        description="Generate and repair JUnit 4 tests for Java classes in downloaded libraries."
     )
-    parser.add_argument("--library", default=DEFAULT_TARGET_LIBRARY, help="Folder under libraries_small.")
+    parser.add_argument(
+        "--library",
+        default=DEFAULT_TARGET_LIBRARY,
+        help=(
+            "Maven coordinates in the downloaded folder structure. "
+            "Examples: commons-cli:commons-cli:1.2, org.apache.commons:commons-csv:1.8."
+        ),
+    )
+    parser.add_argument(
+        "--libraries-root",
+        default=str(DEFAULT_LIBRARIES_ROOT),
+        help="Root folder containing libraries downloaded by libraries_builder/download.py.",
+    )
     parser.add_argument(
         "--source",
         help="Optional Java file relative to src/main/java when running a single class.",
@@ -65,4 +77,27 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         source=Path(args.source) if args.source else DEFAULT_TARGET_SOURCE_RELATIVE_PATH,
         model=get_model(args.model),
         attempts=args.attempts,
+        libraries_root=Path(args.libraries_root),
     )
+
+
+def resolve_library_path(libraries_root: Path, library: str) -> Path:
+    """Resolve Maven coordinates to libraries_root/groupId/artifactId/version."""
+    coordinate_path = coordinate_to_path(libraries_root, library)
+    if coordinate_path is not None:
+        return coordinate_path
+
+    safe_name = library.replace("/", "_").replace("\\", "_").replace(":", "_")
+    return libraries_root / "__invalid_maven_coordinates__" / safe_name
+
+
+def coordinate_to_path(libraries_root: Path, library: str) -> Path | None:
+    parts = library.split(":")
+    if len(parts) != 3:
+        return None
+
+    group_id, artifact_id, version = parts
+    if not group_id or not artifact_id or not version:
+        return None
+
+    return libraries_root / group_id / artifact_id / version

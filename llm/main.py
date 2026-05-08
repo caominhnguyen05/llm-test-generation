@@ -22,7 +22,7 @@ def generate_llm_response(prompt: str, model: str) -> str:
 
 def get_generation_prompt(source_code: str, package_name: str, class_name: str) -> str:
     return f"""
-    Generate a complete JUnit 4 test class for the focal Java class below.
+    Generate a complete JUnit 4 test class for the Java class below.
 
     Primary goal:
     Create a compiling, passing test class that covers meaningful behavior in `{class_name}`, including

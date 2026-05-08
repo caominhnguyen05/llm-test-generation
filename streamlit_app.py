@@ -12,11 +12,16 @@ from pathlib import Path
 import streamlit as st
 
 from llm.config import available_model_names
-from pipeline_config import DEFAULT_MAX_REPAIR_ATTEMPTS, DEFAULT_OLLAMA_MODEL_NAME
+from pipeline_config import (
+    DEFAULT_LIBRARIES_ROOT,
+    DEFAULT_MAX_REPAIR_ATTEMPTS,
+    DEFAULT_OLLAMA_MODEL_NAME,
+    coordinate_to_path,
+)
 
 
 ROOT = Path(__file__).resolve().parent
-LIBRARIES_ROOT = ROOT / "libraries_small"
+LIBRARIES_ROOT = ROOT / DEFAULT_LIBRARIES_ROOT
 CSV_ROOT = ROOT / "csv_data"
 
 
@@ -147,11 +152,20 @@ def apply_theme() -> None:
 def library_names() -> list[str]:
     if not LIBRARIES_ROOT.exists():
         return []
-    return sorted(path.name for path in LIBRARIES_ROOT.iterdir() if path.is_dir())
+    libraries: list[str] = []
+    for pom in LIBRARIES_ROOT.glob("*/*/*/pom.xml"):
+        version_dir = pom.parent
+        artifact_dir = version_dir.parent
+        group_dir = artifact_dir.parent
+        libraries.append(f"{group_dir.name}:{artifact_dir.name}:{version_dir.name}")
+    return sorted(libraries)
 
 
 def source_files(library: str) -> list[str]:
-    source_root = LIBRARIES_ROOT / library / "src/main/java"
+    library_path = coordinate_to_path(LIBRARIES_ROOT, library)
+    if library_path is None:
+        return []
+    source_root = library_path / "src/main/java"
     if not source_root.exists():
         return []
     return [str(path.relative_to(source_root)).replace("\\", "/") for path in sorted(source_root.rglob("*.java"))]
@@ -252,7 +266,7 @@ def render_metrics(libraries: list[str]) -> None:
 def pipeline_tab(libraries: list[str]) -> None:
     st.subheader("Pipeline")
     if not libraries:
-        st.error("No libraries found in libraries_small.")
+        st.error("No libraries found in libraries_initial.")
         return
 
     col_a, col_b, col_c = st.columns([1.25, 1.25, 0.8])
@@ -297,10 +311,12 @@ def coverage_tab(libraries: list[str]) -> None:
     scope = st.segmented_control("Scope", ["All libraries", "One library"], default="All libraries")
     output_name = st.text_input("CSV output", value="csv_data/coverage_results.csv")
 
-    root_arg = "libraries_small"
+    root_arg = "libraries_initial"
     if scope == "One library" and libraries:
         library = st.selectbox("Library", libraries, key="coverage_library")
-        root_arg = str(Path("libraries_small") / library)
+        library_path = coordinate_to_path(Path("libraries_initial"), library)
+        if library_path is not None:
+            root_arg = str(library_path)
 
     command = [sys.executable, "-u", "coverage/run_coverage.py", root_arg, "--output", output_name]
     if st.button("Run Coverage", use_container_width=True):
