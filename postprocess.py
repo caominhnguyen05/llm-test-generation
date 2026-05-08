@@ -13,13 +13,7 @@ def contains_class_declaration(source_code: str, class_name: str) -> bool:
 
 
 def extract_java_code(llm_output: str, expected_class: str | None = None) -> str:
-    """Extract the generated Java test class from an LLM response.
-
-    LLM repair responses often contain small fenced Java snippets before the
-    complete test class. When an expected class is known, prefer the fenced
-    block that actually declares that class instead of blindly taking the first
-    ```java block.
-    """
+    """Extract the generated Java test class from an LLM response."""
     java_blocks = [
         match.group(1).strip()
         for match in re.finditer(r"```java\s*(.*?)```", llm_output, flags=re.DOTALL | re.IGNORECASE)

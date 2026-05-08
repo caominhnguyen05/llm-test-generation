@@ -7,13 +7,12 @@ from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
 from preprocess import assess_source_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
+from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_jacoco
 
 REPO_ROOT = Path(__file__).resolve().parent
 COVERAGE_DIR = REPO_ROOT / "coverage"
 if str(COVERAGE_DIR) not in sys.path:
     sys.path.insert(0, str(COVERAGE_DIR))
-
-from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_jacoco
 
 LLM_COVERAGE_CSV = REPO_ROOT / "csv_data/llm_coverage.csv"
 
@@ -34,7 +33,7 @@ def iter_library_sources(config: PipelineConfig) -> list[Path]:
             skipped_sources.append((relative_path, decision.reason))
 
     if skipped_sources:
-        print(f"Preprocessing skipped {len(skipped_sources)} likely non-testable source file(s):")
+        print(f"Preprocessing skipped {len(skipped_sources)} likely non-testable source files:")
         for source, reason in skipped_sources:
             print(f"- {source}: {reason}")
 
@@ -211,7 +210,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
         return
 
     failures: list[tuple[Path, str]] = []
-    print(f"Found {len(sources)} Java source files in {config.library}.")
+    print(f"Found {len(sources)} testable Java source files in {config.library}.")
 
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
@@ -230,7 +229,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
         for source, message in failures:
             print(f"❌ {source}: {message}")
     else:
-        print("\n✅ Completed successfully with no failed source files.")
+        print("\nCompleted successfully with no failed source files.")
 
     append_library_coverage(config)
 

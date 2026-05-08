@@ -27,7 +27,9 @@ This step generates JUnit 4 tests for a selected Maven library, validates them w
 
 Run:
 
+```bash
 python main.py --library <group_id>:<artifact_id>:<version>
+```
 
 Then choose a mode:
 
@@ -85,3 +87,12 @@ Generated tests are written to:
 Coverage results are appended to:
 
 `csv_data/llm_coverage.csv`
+
+## Run Pipeline with Streamlit UI
+
+```bash
+pip install streamlit
+streamlit run streamlit_app.py
+```
+
+The page will then be available at `http://localhost:8501`.

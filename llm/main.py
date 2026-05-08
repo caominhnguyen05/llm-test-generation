@@ -14,7 +14,7 @@ def generate_llm_response(prompt: str, model: str) -> str:
     llm_output = ""
     for chunk in stream:
         token = chunk["message"]["content"]
-        print(token, end="", flush=True)
+        print(token, end="", flush=True) # Uncomment to see real-time test code generation
         llm_output += token
     print("\n\nGeneration complete.\n")
     return llm_output
@@ -54,7 +54,7 @@ def get_repair_prompt(
     class_name: str,
 ) -> str:
     return f"""
-    You are repairing a generated JUnit 4 test file.
+    You are repairing a generated JUnit 4 test file of a Java library class.
 
     Return ONLY one complete Java source file inside a single ```java block.
     Do not explain anything.
@@ -65,7 +65,7 @@ def get_repair_prompt(
     Repair goal:
     - Fix the test so it compiles and passes.
     - The source under test is assumed correct.
-    - If an assertion fails, change the test expectation to match actual behavior.
+    - If an assertion fails, change the test expectation to match actual behavior shown in the error output.
     - If a test expects an exception that is not thrown, remove or replace that invalid expectation.
     - Do not invent APIs or dependencies.
     - Keep or add meaningful coverage where possible.

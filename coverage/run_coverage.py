@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from config import JACOCO_VERSION, FIELDNAMES, COUNTER_FIELDS
+from coverage.config import FIELDNAMES, COUNTER_FIELDS
 
 
 @dataclass(frozen=True)

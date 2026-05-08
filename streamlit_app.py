@@ -65,13 +65,13 @@ def apply_theme() -> None:
         }
 
         .hero {
-            padding: 34px 0 18px;
+            padding: 0 0 18px;
             border-bottom: 1px solid var(--line);
             margin-bottom: 20px;
         }
 
         .hero h1 {
-            font-size: 46px;
+            font-size: 40px;
             line-height: 1.02;
             letter-spacing: 0;
             margin: 0 0 8px;
@@ -194,7 +194,12 @@ def stream_command(command: list[str], title: str, timeout: int | None = None) -
         encoding="utf-8",
         errors="replace",
         bufsize=1,
-        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        env={
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+        },
     )
 
     def read_output() -> None:
@@ -220,7 +225,7 @@ def stream_command(command: list[str], title: str, timeout: int | None = None) -
 
         tick = (tick + 1) % 100
         progress.progress(tick)
-        output_box.code("\n".join(lines[-260:]) or "Waiting for output...", language="text")
+        output_box.code("\n".join(lines[-100:]) or "Waiting for output...", language="text")
 
         if timeout and time.time() - start > timeout:
             process.kill()
@@ -243,7 +248,7 @@ def render_header() -> None:
         """
         <div class="hero">
             <h1>LLM Test Pipeline</h1>
-            <p>Generate, validate, repair, and measure Java unit tests from one focused console.</p>
+            <p>Generate, validate, repair, and measure LLM generated test suites.</p>
         </div>
         """,
         unsafe_allow_html=True,
