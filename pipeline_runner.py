@@ -57,7 +57,7 @@ def save_test_code(output_test_file: Path, test_code: str, class_name: str, labe
     if not syntax_result.passed:
         print(f"Quick syntax warnings before Maven: {syntax_result.message}")
     write_file(output_test_file, test_code)
-    print(f"💾 {label} test saved to {output_test_file}")
+    print(f"{label} test saved to {output_test_file}")
 
 
 def generate_initial_test(config: PipelineConfig, source_code: str, package_name: str, class_name: str) -> str:
@@ -66,7 +66,7 @@ def generate_initial_test(config: PipelineConfig, source_code: str, package_name
     The raw LLM response is normalized so the result is a complete Java test
     file with the expected package and class name.
     """
-    print(f"\n🤖 [Attempt 0] Asking Ollama ({config.model}) to generate tests...")
+    print(f"\n[Attempt 0] Asking Ollama ({config.model}) to generate tests...")
     llm_output = generate_llm_response(
         get_generation_prompt(source_code, package_name, class_name),
         config.model,
@@ -88,7 +88,7 @@ def generate_repair_test(
     validation error output so the model can fix syntax, compile, or runtime
     execution problems.
     """
-    print(f"🤖 Asking Ollama ({config.model}) to repair the test...")
+    print(f"Asking Ollama ({config.model}) to repair the test...")
     llm_output = generate_llm_response(
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
         config.model,
@@ -153,7 +153,7 @@ def run_pipeline(config: PipelineConfig) -> bool:
         return False
 
     for attempt in range(config.attempts + 1):
-        print(f"\n🔍 Validating {test_class} on attempt {attempt}/{config.attempts}...")
+        print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
         try:
             validation_result = validate_generated_test(config, test_code, test_class)
         except Exception as exc:
@@ -171,14 +171,14 @@ def run_pipeline(config: PipelineConfig) -> bool:
             if validation_result.stage in {"compile", "syntax"}:
                 delete_generated_test(output_test_file, f"{validation_result.stage} validation failed")
             else:
-                print(f"📌 Keeping generated test file as-is: {output_test_file}")
+                print(f"Keeping generated test file: {output_test_file}")
 
             return False
 
 
         print(f"❌ {validation_result.stage.title()} validation failed for {test_class}.")
-        print(f"🧾 Error: {validation_result.message}")
-        print(f"🔧 Starting repair loop {attempt + 1}/{config.attempts}...")
+        print(f"Error: {validation_result.message}")
+        print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
 
         try:
             test_code = generate_repair_test(
@@ -206,7 +206,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     """
     sources = iter_library_sources(config)
     if not sources:
-        print(f"⚠️ No Java source files found under {config.source_root}")
+        print(f"No Java source files found under {config.source_root}")
         return
 
     failures: list[tuple[Path, str]] = []
@@ -222,7 +222,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
             print(exc)
-            print("📌 Keeping any generated test file as-is and continuing with the next class.")
+            print("Keeping any generated test file and continuing with the next class.")
 
     if failures:
         print(f"\nCompleted with {len(failures)} failed source file(s):")
@@ -247,5 +247,5 @@ def delete_generated_test(output_test_file: Path, reason: str) -> None:
     """Delete a generated test file that would break later Maven/JaCoCo runs."""
     if output_test_file.exists():
         output_test_file.unlink()
-        print(f"🗑️ Deleted generated test: {output_test_file}")
+        print(f"Deleted generated test: {output_test_file}")
         print(f"   Reason: {reason}")
