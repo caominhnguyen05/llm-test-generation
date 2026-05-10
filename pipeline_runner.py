@@ -1,5 +1,8 @@
+import csv
+import re
 import sys
-from dataclasses import replace
+from collections import Counter
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from llm.main import generate_llm_response, get_generation_prompt, get_repair_prompt
@@ -15,6 +18,32 @@ if str(COVERAGE_DIR) not in sys.path:
     sys.path.insert(0, str(COVERAGE_DIR))
 
 LLM_COVERAGE_CSV = REPO_ROOT / "csv_data/llm_coverage.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "csv_data/llm_compile_failures.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "csv_data/llm_compile_failure_summary.csv"
+
+COMPILE_FAILURE_FIELDNAMES = [
+    "library",
+    "source_file",
+    "test_class",
+    "stage",
+    "category",
+    "message",
+]
+COMPILE_FAILURE_SUMMARY_FIELDNAMES = [
+    "library",
+    "category",
+    "compile_failures",
+    "percentage",
+]
+
+
+@dataclass(frozen=True)
+class PipelineResult:
+    succeeded: bool
+    message: str = ""
+
+    def __bool__(self) -> bool:
+        return self.succeeded
 
 
 def iter_library_sources(config: PipelineConfig) -> list[Path]:
@@ -118,7 +147,7 @@ def validate_generated_test(config: PipelineConfig, test_code: str, test_class: 
     return ValidationResult(True, "complete", runtime_result.message)
 
 
-def run_pipeline(config: PipelineConfig) -> bool:
+def run_pipeline(config: PipelineConfig) -> PipelineResult:
     """Generate, save, validate, and repair a test for one Java source file.
 
     The pipeline reads the target source file, asks the LLM for an initial test,
@@ -126,12 +155,12 @@ def run_pipeline(config: PipelineConfig) -> bool:
     the test is valid or the configured repair limit is reached.
     """
     if not validate_inputs(config):
-        return False
+        return PipelineResult(False, "invalid input")
 
     testability = assess_source_testability(config.target_java_file, config.source_root)
     if not testability.testable:
         print(f"Skipping {config.target_java_file}: {testability.reason}.")
-        return True
+        return PipelineResult(True, f"skipped: {testability.reason}")
 
     source_code = read_source_file(config.target_java_file)
     package_name, class_name = extract_package_and_class(config.target_java_file, config.source_root)
@@ -150,7 +179,7 @@ def run_pipeline(config: PipelineConfig) -> bool:
     except Exception as exc:
         print(f"Failed while generating {test_class}: {exc}")
         delete_generated_test(output_test_file, f"generation exception: {exc}")
-        return False
+        return PipelineResult(False, f"generation failed: {exc}")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
@@ -159,21 +188,22 @@ def run_pipeline(config: PipelineConfig) -> bool:
         except Exception as exc:
             print(f"Failed while validating {test_class}: {exc}")
             delete_generated_test(output_test_file, f"validation exception: {exc}")
-            return False
+            return PipelineResult(False, f"validation exception: {exc}")
 
         if validation_result.passed:
             print(f"✅ SUCCESS: {test_class} is syntactically valid, compiles, and is executable on attempt {attempt}.")
-            return True
+            return PipelineResult(True)
 
         if attempt >= config.attempts:
             print(f"❌ FAILURE: max repair attempts ({config.attempts}) reached.")
             print(f"❌ Validation failed for {test_class}: {validation_result.message}")
             if validation_result.stage in {"compile", "syntax"}:
+                record_compile_failure(config, test_class, validation_result)
                 delete_generated_test(output_test_file, f"{validation_result.stage} validation failed")
             else:
                 print(f"Keeping generated test file: {output_test_file}")
 
-            return False
+            return PipelineResult(False, f"{validation_result.stage} validation failed after max repair attempts")
 
 
         print(f"❌ {validation_result.stage.title()} validation failed for {test_class}.")
@@ -193,9 +223,9 @@ def run_pipeline(config: PipelineConfig) -> bool:
         except Exception as exc:
             print(f"Failed while repairing {test_class}: {exc}")
             delete_generated_test(output_test_file, f"repair exception: {exc}")
-            return False
+            return PipelineResult(False, f"repair failed: {exc}")
 
-    return False
+    return PipelineResult(False, "validation failed")
 
 
 def run_library_pipeline(config: PipelineConfig) -> None:
@@ -215,9 +245,9 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
-            succeeded = run_pipeline(replace(config, source=source))
-            if not succeeded:
-                failures.append((source, "validation failed after max repair attempts"))
+            result = run_pipeline(replace(config, source=source))
+            if not result:
+                failures.append((source, result.message))
         except Exception as exc:
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
@@ -231,16 +261,136 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     else:
         print("\nCompleted successfully with no failed source files.")
 
-    append_library_coverage(config)
+    generated_test_classes = count_generated_test_classes(config, sources)
+    if generated_test_classes == 0:
+        print("\nSkipping JaCoCo coverage because no generated test classes survived.")
+        write_compile_failure_summary()
+        return
+
+    append_library_coverage(config, len(sources), generated_test_classes)
+    write_compile_failure_summary()
 
 
-def append_library_coverage(config: PipelineConfig) -> None:
+def append_library_coverage(config: PipelineConfig, testable_source_files: int, generated_test_classes: int) -> None:
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
     project = read_maven_project(config.library_path)
-    jacoco_success, maven_output = run_jacoco(project.path, 300)
-    append_row(read_coverage(project, jacoco_success, maven_output), LLM_COVERAGE_CSV)
-    print(f"Coverage row appended to {LLM_COVERAGE_CSV}")
+    _, maven_output = run_jacoco(project.path, 300)
+    append_row(
+        read_coverage(
+            project,
+            maven_output,
+            testable_source_files=testable_source_files,
+            generated_test_classes=generated_test_classes,
+        ),
+        LLM_COVERAGE_CSV,
+    )
+    print(f"Coverage row written to {LLM_COVERAGE_CSV}")
+
+
+def count_generated_test_classes(config: PipelineConfig, sources: list[Path]) -> int:
+    """Count surviving generated tests for the sources processed in this run."""
+    generated_count = 0
+    for source in sources:
+        source_file = config.source_root / source
+        package_name, class_name = extract_package_and_class(source_file, config.source_root)
+        test_class = f"{class_name}Test"
+        test_file = config.test_root / package_name.replace(".", "/") / f"{test_class}.java"
+        if test_file.exists():
+            generated_count += 1
+    return generated_count
+
+
+def categorize_compile_error(message: str, stage: str = "compile") -> str:
+    """Return a coarse regex-based category for a Maven compile error."""
+    if stage == "syntax":
+        return "syntax_error"
+
+    normalized = message.lower()
+    patterns = [
+        ("junit_version_mismatch", r"org\.junit\.jupiter|jupiter.*does not exist|package org\.junit\.jupiter does not exist"),
+        ("missing_import", r"package .+ does not exist|import .+ cannot be resolved"),
+        ("cannot_find_symbol", r"cannot find symbol|symbol:\s*(class|method|variable)"),
+        ("constructor_mismatch", r"constructor .+ cannot be applied|no suitable constructor"),
+        ("method_signature_mismatch", r"method .+ cannot be applied|no suitable method|actual and formal argument lists differ"),
+        ("access_modifier_error", r"has private access|has protected access|is not public in|cannot be accessed from outside package"),
+        (
+            "abstract_class_or_interface_instantiation",
+            r"is abstract; cannot be instantiated|is abstract and cannot be instantiated|is an interface; cannot be instantiated",
+        ),
+        ("unchecked_exception_not_handled", r"unreported exception|must be caught or declared to be thrown"),
+        ("generic_type_mismatch", r"incompatible types|inference variable|type argument|cannot infer type"),
+        ("dependency_missing", r"could not resolve dependencies|dependency .+ not found|package .+ does not exist"),
+        ("syntax_error", r"';' expected|illegal start of|reached end of file while parsing|not a statement|class, interface, enum, or record expected"),
+    ]
+    for category, pattern in patterns:
+        if re.search(pattern, normalized, re.DOTALL):
+            return category
+    return "other_compile_error"
+
+
+def record_compile_failure(config: PipelineConfig, test_class: str, validation_result: ValidationResult) -> None:
+    """Append one compile/syntax failure row before deleting the generated test."""
+    category = categorize_compile_error(validation_result.message, validation_result.stage)
+    row = {
+        "library": config.library,
+        "source_file": str(config.source),
+        "test_class": test_class,
+        "stage": validation_result.stage,
+        "category": category,
+        "message": compact_csv_message(validation_result.message),
+    }
+    append_csv_row(COMPILE_FAILURES_CSV, COMPILE_FAILURE_FIELDNAMES, row)
+    print(f"Recorded {validation_result.stage} failure category for {test_class}: {category}")
+
+
+def write_compile_failure_summary() -> None:
+    """Write category counts and percentages from the compile failure detail CSV."""
+    if not COMPILE_FAILURES_CSV.exists():
+        return
+
+    library_counts: dict[str, Counter[str]] = {}
+    with open(COMPILE_FAILURES_CSV, "r", encoding="utf-8", newline="") as file:
+        for row in csv.DictReader(file):
+            library = row.get("library", "")
+            if not library:
+                continue
+            category = row.get("category", "other_compile_error")
+            library_counts.setdefault(library, Counter())[category] += 1
+
+    if not library_counts:
+        return
+
+    COMPILE_FAILURE_SUMMARY_CSV.parent.mkdir(parents=True, exist_ok=True)
+    with open(COMPILE_FAILURE_SUMMARY_CSV, "w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=COMPILE_FAILURE_SUMMARY_FIELDNAMES)
+        writer.writeheader()
+        for library, category_counts in sorted(library_counts.items()):
+            total_failures = sum(category_counts.values())
+            for category, count in sorted(category_counts.items()):
+                writer.writerow(
+                    {
+                        "library": library,
+                        "category": category,
+                        "compile_failures": str(count),
+                        "percentage": f"{(count / total_failures) * 100:.2f}",
+                    }
+                )
+    print(f"Compile failure summary written to {COMPILE_FAILURE_SUMMARY_CSV}")
+
+
+def append_csv_row(output_path: Path, fieldnames: list[str], row: dict[str, str]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    should_write_header = not output_path.exists() or output_path.stat().st_size == 0
+    with open(output_path, "a", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if should_write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def compact_csv_message(message: str) -> str:
+    return re.sub(r"\s+", " ", message).strip()[-1000:]
 
 
 def delete_generated_test(output_test_file: Path, reason: str) -> None:
