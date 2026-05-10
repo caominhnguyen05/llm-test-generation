@@ -77,8 +77,13 @@ def run_jacoco(project_path: Path, timeout: int) -> tuple[bool, str]:
     return False, output
 
 
-def read_coverage(project: MavenProject, jacoco_success: bool, maven_output: str) -> dict[str, str]:
-    tests_passed, tests_total = _parse_test_counts(maven_output)
+def read_coverage(
+    project: MavenProject,
+    maven_output: str,
+    testable_source_files: int | None = None,
+    generated_test_classes: int | None = None,
+) -> dict[str, str]:
+    tests_passed, tests_total, tests_failed_assertions, tests_runtime_errors = _parse_test_counts(maven_output)
     row = {
         "group_id": project.group_id,
         "artifact_id": project.artifact_id,
@@ -90,14 +95,16 @@ def read_coverage(project: MavenProject, jacoco_success: bool, maven_output: str
         "complexity_coverage": "",
         "method_coverage": "",
         "class_coverage": "",
-        "tests_passed": tests_passed,
+        "testable_source_files": _optional_int(testable_source_files),
+        "generated_test_classes": _optional_int(generated_test_classes),
+        "compilation_success_rate": _rate(generated_test_classes, testable_source_files),
         "tests_total": tests_total,
-        "jacoco_success": str(jacoco_success).lower(),
-        "percentage_passed": (
-            f"{(int(tests_passed) / int(tests_total)) * 100:.2f}"
-            if tests_total.isdigit() and int(tests_total) > 0
-            else ""
-        ),
+        "tests_passed": tests_passed,
+        "tests_failed_assertions": tests_failed_assertions,
+        "tests_runtime_errors": tests_runtime_errors,
+        "runtime_success_rate": _rate_str(tests_passed, tests_total),
+        "failed_assertion_rate": _rate(tests_failed_assertions, tests_total),
+        "runtime_error_rate": _rate(tests_runtime_errors, tests_total),
     }
 
     report_path = project.path / "target/site/jacoco/jacoco.xml"
@@ -129,13 +136,22 @@ def write_rows(rows: list[dict[str, str]], output_path: str | None) -> None:
 
 
 def append_row(row: dict[str, str], output_path: Path) -> None:
+    """Insert or replace one coverage row keyed by Maven coordinates and source."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    should_write_header = not output_path.exists() or output_path.stat().st_size == 0
-    with open(output_path, "a", encoding="utf-8", newline="") as file:
+
+    rows: list[dict[str, str]] = []
+    if output_path.exists() and output_path.stat().st_size > 0:
+        with open(output_path, "r", encoding="utf-8", newline="") as file:
+            for existing_row in csv.DictReader(file):
+                if not _same_coverage_row(existing_row, row):
+                    rows.append(_project_fieldnames(existing_row))
+
+    rows.append(_project_fieldnames(row))
+
+    with open(output_path, "w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        if should_write_header:
-            writer.writeheader()
-        writer.writerow(row)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _coverage_percent(counter_attributes: dict[str, str]) -> str:
@@ -147,7 +163,36 @@ def _coverage_percent(counter_attributes: dict[str, str]) -> str:
     return f"{covered / total * 100:.2f}"
 
 
-def _parse_test_counts(maven_output: str) -> tuple[str, str]:
+def _same_coverage_row(existing_row: dict[str, str], new_row: dict[str, str]) -> bool:
+    exact_key = (
+        existing_row.get("group_id") == new_row.get("group_id")
+        and existing_row.get("artifact_id") == new_row.get("artifact_id")
+        and existing_row.get("version") == new_row.get("version")
+        and existing_row.get("source") == new_row.get("source")
+    )
+    if exact_key:
+        return True
+
+    shifted_library_value = ":".join(
+        [
+            new_row.get("group_id", ""),
+            new_row.get("artifact_id", ""),
+            new_row.get("version", ""),
+        ]
+    )
+    return (
+        existing_row.get("group_id") == shifted_library_value
+        and existing_row.get("artifact_id") == new_row.get("group_id")
+        and existing_row.get("version") == new_row.get("artifact_id")
+        and existing_row.get("source") == new_row.get("version")
+    )
+
+
+def _project_fieldnames(row: dict[str, str]) -> dict[str, str]:
+    return {fieldname: row.get(fieldname, "") for fieldname in FIELDNAMES}
+
+
+def _parse_test_counts(maven_output: str) -> tuple[str, str, str, str]:
     matches = list(
         re.finditer(
             r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)",
@@ -155,19 +200,40 @@ def _parse_test_counts(maven_output: str) -> tuple[str, str]:
         )
     )
     if not matches:
-        return "", ""
+        return "", "", "", ""
 
     tests_total = 0
-    tests_not_passed = 0
+    tests_failed_assertions = 0
+    tests_runtime_errors = 0
+    tests_skipped = 0
     for match in matches:
         tests_run = int(match.group(1))
         failures = int(match.group(2))
         errors = int(match.group(3))
         skipped = int(match.group(4))
         tests_total += tests_run
-        tests_not_passed += failures + errors + skipped
+        tests_failed_assertions += failures
+        tests_runtime_errors += errors
+        tests_skipped += skipped
 
-    return str(tests_total - tests_not_passed), str(tests_total)
+    tests_passed = tests_total - tests_failed_assertions - tests_runtime_errors - tests_skipped
+    return str(tests_passed), str(tests_total), str(tests_failed_assertions), str(tests_runtime_errors)
+
+
+def _optional_int(value: int | None) -> str:
+    return "" if value is None else str(value)
+
+
+def _rate(numerator: int | None, denominator: int | None) -> str:
+    if numerator is None or denominator is None or denominator == 0:
+        return ""
+    return f"{numerator / denominator:.4f}"
+
+
+def _rate_str(numerator: str, denominator: str) -> str:
+    if not numerator.isdigit() or not denominator.isdigit() or int(denominator) == 0:
+        return ""
+    return f"{int(numerator) / int(denominator):.4f}"
 
 
 def _xml_namespace(root: ET.Element) -> str:
@@ -196,8 +262,8 @@ def main() -> None:
     rows = []
     for project_path in find_maven_projects(root):
         project = read_maven_project(project_path)
-        jacoco_success, maven_output = run_jacoco(project.path, 300)
-        rows.append(read_coverage(project, jacoco_success, maven_output))
+        _, maven_output = run_jacoco(project.path, 300)
+        rows.append(read_coverage(project, maven_output))
 
     write_rows(rows, args.output)
 
