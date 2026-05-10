@@ -1,5 +1,3 @@
-JACOCO_VERSION = "0.8.12"
-
 FIELDNAMES = [
     "group_id",
     "artifact_id",
@@ -11,17 +9,14 @@ FIELDNAMES = [
     "complexity_coverage",
     "method_coverage",
     "class_coverage",
-    "tests_passed",
+    "testable_source_files",
+    "generated_test_classes",
+    "compilation_success_rate",
     "tests_total",
-    "percentage_passed",
-    "jacoco_success",
+    "tests_passed",
+    "tests_failed_assertions",
+    "tests_runtime_errors",
+    "runtime_success_rate",
+    "failed_assertion_rate",
+    "runtime_error_rate",
 ]
-
-COUNTER_FIELDS = {
-    "INSTRUCTION": "instruction_coverage",
-    "BRANCH": "branch_coverage",
-    "LINE": "line_coverage",
-    "COMPLEXITY": "complexity_coverage",
-    "METHOD": "method_coverage",
-    "CLASS": "class_coverage",
-}

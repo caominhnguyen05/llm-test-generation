@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from coverage.config import FIELDNAMES, COUNTER_FIELDS
+from coverage.config import FIELDNAMES
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,14 @@ class MavenProject:
     group_id: str
     artifact_id: str
     version: str
+
+
+@dataclass(frozen=True)
+class TestCounts:
+    total: int = 0
+    passed: int = 0
+    failed_assertions: int = 0
+    runtime_errors: int = 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,7 +91,7 @@ def read_coverage(
     testable_source_files: int | None = None,
     generated_test_classes: int | None = None,
 ) -> dict[str, str]:
-    tests_passed, tests_total, tests_failed_assertions, tests_runtime_errors = _parse_test_counts(maven_output)
+    test_counts = _parse_test_counts(maven_output)
     row = {
         "group_id": project.group_id,
         "artifact_id": project.artifact_id,
@@ -98,13 +106,13 @@ def read_coverage(
         "testable_source_files": _optional_int(testable_source_files),
         "generated_test_classes": _optional_int(generated_test_classes),
         "compilation_success_rate": _rate(generated_test_classes, testable_source_files),
-        "tests_total": tests_total,
-        "tests_passed": tests_passed,
-        "tests_failed_assertions": tests_failed_assertions,
-        "tests_runtime_errors": tests_runtime_errors,
-        "runtime_success_rate": _rate_str(tests_passed, tests_total),
-        "failed_assertion_rate": _rate(tests_failed_assertions, tests_total),
-        "runtime_error_rate": _rate(tests_runtime_errors, tests_total),
+        "tests_total": str(test_counts.total),
+        "tests_passed": str(test_counts.passed),
+        "tests_failed_assertions": str(test_counts.failed_assertions),
+        "tests_runtime_errors": str(test_counts.runtime_errors),
+        "runtime_success_rate": _rate(test_counts.passed, test_counts.total),
+        "failed_assertion_rate": _rate(test_counts.failed_assertions, test_counts.total),
+        "runtime_error_rate": _rate(test_counts.runtime_errors, test_counts.total),
     }
 
     report_path = project.path / "target/site/jacoco/jacoco.xml"
@@ -114,9 +122,8 @@ def read_coverage(
 
     report_root = ET.parse(report_path).getroot()
     for counter in report_root.findall("counter"):
-        counter_type = counter.attrib.get("type")
-        field_name = COUNTER_FIELDS.get(counter_type or "")
-        if field_name:
+        field_name = _coverage_field_name(counter.attrib.get("type", ""))
+        if field_name in row:
             row[field_name] = _coverage_percent(counter.attrib)
 
     return row
@@ -163,6 +170,10 @@ def _coverage_percent(counter_attributes: dict[str, str]) -> str:
     return f"{covered / total * 100:.2f}"
 
 
+def _coverage_field_name(counter_type: str) -> str:
+    return f"{counter_type.lower()}_coverage"
+
+
 def _same_coverage_row(existing_row: dict[str, str], new_row: dict[str, str]) -> bool:
     exact_key = (
         existing_row.get("group_id") == new_row.get("group_id")
@@ -192,7 +203,7 @@ def _project_fieldnames(row: dict[str, str]) -> dict[str, str]:
     return {fieldname: row.get(fieldname, "") for fieldname in FIELDNAMES}
 
 
-def _parse_test_counts(maven_output: str) -> tuple[str, str, str, str]:
+def _parse_test_counts(maven_output: str) -> TestCounts:
     matches = list(
         re.finditer(
             r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)",
@@ -200,7 +211,7 @@ def _parse_test_counts(maven_output: str) -> tuple[str, str, str, str]:
         )
     )
     if not matches:
-        return "", "", "", ""
+        return TestCounts()
 
     tests_total = 0
     tests_failed_assertions = 0
@@ -217,7 +228,12 @@ def _parse_test_counts(maven_output: str) -> tuple[str, str, str, str]:
         tests_skipped += skipped
 
     tests_passed = tests_total - tests_failed_assertions - tests_runtime_errors - tests_skipped
-    return str(tests_passed), str(tests_total), str(tests_failed_assertions), str(tests_runtime_errors)
+    return TestCounts(
+        total=tests_total,
+        passed=tests_passed,
+        failed_assertions=tests_failed_assertions,
+        runtime_errors=tests_runtime_errors,
+    )
 
 
 def _optional_int(value: int | None) -> str:
@@ -228,12 +244,6 @@ def _rate(numerator: int | None, denominator: int | None) -> str:
     if numerator is None or denominator is None or denominator == 0:
         return ""
     return f"{numerator / denominator:.4f}"
-
-
-def _rate_str(numerator: str, denominator: str) -> str:
-    if not numerator.isdigit() or not denominator.isdigit() or int(denominator) == 0:
-        return ""
-    return f"{int(numerator) / int(denominator):.4f}"
 
 
 def _xml_namespace(root: ET.Element) -> str:
