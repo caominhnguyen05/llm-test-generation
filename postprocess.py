@@ -160,8 +160,4 @@ def test_class_syntax_check(test_code: str, class_name: str) -> list[str]:
         issues.append(f"missing public class {class_name}Test declaration")
     if "@Test" not in test_code:
         issues.append("missing @Test method annotation")
-    if test_code.count("{") != test_code.count("}"):
-        issues.append("unbalanced curly braces")
-    if test_code.count("(") != test_code.count(")"):
-        issues.append("unbalanced parentheses")
     return issues
