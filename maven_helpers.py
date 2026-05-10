@@ -4,7 +4,6 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from shutil import move
-
 from pipeline_config import ERROR_CONTEXT_CHARS, MAVEN_TIMEOUT_SECONDS
 
 
