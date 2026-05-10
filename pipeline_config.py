@@ -6,7 +6,7 @@ from llm.config import get_model, available_model_names
 
 
 DEFAULT_OLLAMA_MODEL_NAME = "qwen_coder_small"
-DEFAULT_LIBRARIES_ROOT = Path("libraries_initial")
+DEFAULT_LIBRARIES_ROOT = Path("libraries_sample")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 DEFAULT_TARGET_SOURCE_RELATIVE_PATH = Path("org/apache/commons/cli/AlreadySelectedException.java")
 
