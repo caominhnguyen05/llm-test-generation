@@ -68,7 +68,11 @@ def get_repair_prompt(
     - If an assertion fails, change the test expectation to match actual behavior shown in the error output.
     - If a test expects an exception that is not thrown, remove or replace that invalid expectation.
     - Do not invent APIs or dependencies.
-    - Keep or add meaningful coverage where possible.
+    - Do not shrink the test class just to make it pass.
+    - Preserve existing valid test methods whenever possible.
+    - If you remove or simplify an invalid test, replace it with another meaningful passing test.
+    - Add additional focused tests when the current test class misses important source behavior, branches, boundary cases, or exceptions.
+    - Aim for a compiling, passing test class with broad behavior coverage, not the smallest passing test.
 
     Source under test:
     ```java
