@@ -143,22 +143,15 @@ def write_rows(rows: list[dict[str, str]], output_path: str | None) -> None:
 
 
 def append_row(row: dict[str, str], output_path: Path) -> None:
-    """Insert or replace one coverage row keyed by Maven coordinates and source."""
+    """Append one coverage row without modifying existing CSV rows."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    should_write_header = not output_path.exists() or output_path.stat().st_size == 0
 
-    rows: list[dict[str, str]] = []
-    if output_path.exists() and output_path.stat().st_size > 0:
-        with open(output_path, "r", encoding="utf-8", newline="") as file:
-            for existing_row in csv.DictReader(file):
-                if not _same_coverage_row(existing_row, row):
-                    rows.append(_project_fieldnames(existing_row))
-
-    rows.append(_project_fieldnames(row))
-
-    with open(output_path, "w", encoding="utf-8", newline="") as file:
+    with open(output_path, "a", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(rows)
+        if should_write_header:
+            writer.writeheader()
+        writer.writerow(_project_fieldnames(row))
 
 
 def _coverage_percent(counter_attributes: dict[str, str]) -> str:
@@ -172,31 +165,6 @@ def _coverage_percent(counter_attributes: dict[str, str]) -> str:
 
 def _coverage_field_name(counter_type: str) -> str:
     return f"{counter_type.lower()}_coverage"
-
-
-def _same_coverage_row(existing_row: dict[str, str], new_row: dict[str, str]) -> bool:
-    exact_key = (
-        existing_row.get("group_id") == new_row.get("group_id")
-        and existing_row.get("artifact_id") == new_row.get("artifact_id")
-        and existing_row.get("version") == new_row.get("version")
-        and existing_row.get("source") == new_row.get("source")
-    )
-    if exact_key:
-        return True
-
-    shifted_library_value = ":".join(
-        [
-            new_row.get("group_id", ""),
-            new_row.get("artifact_id", ""),
-            new_row.get("version", ""),
-        ]
-    )
-    return (
-        existing_row.get("group_id") == shifted_library_value
-        and existing_row.get("artifact_id") == new_row.get("group_id")
-        and existing_row.get("version") == new_row.get("artifact_id")
-        and existing_row.get("source") == new_row.get("version")
-    )
 
 
 def _project_fieldnames(row: dict[str, str]) -> dict[str, str]:
