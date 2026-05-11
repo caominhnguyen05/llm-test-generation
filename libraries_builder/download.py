@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 
 
 CSV_FILE = "csv_data/evosuite_results_small.csv"
-OUTPUT_DIR = Path("libraries_initial")
+OUTPUT_DIR = Path("libraries_sample")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
 JAVA_VERSION = "8"
@@ -212,6 +212,9 @@ def normalize_generated_test_pom(root):
     add_or_update_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
 
     build = get_or_create_child(root, "build")
+    set_text_child(build, "sourceDirectory", "src/main/java")
+    set_text_child(build, "testSourceDirectory", "src/test/java")
+
     plugins = get_or_create_child(build, "plugins")
     configure_compiler_plugin(plugins)
     configure_surefire_plugin(plugins)
