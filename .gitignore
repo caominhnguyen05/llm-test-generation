@@ -26,8 +26,7 @@ target/
 *.war
 *.ear
 
-selected_libraries/
 libraries/
-libraries_small/
 old_pipelines/
 libraries_initial/
+libraries_sample/
