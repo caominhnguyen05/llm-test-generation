@@ -191,7 +191,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
             return PipelineResult(False, f"validation exception: {exc}")
 
         if validation_result.passed:
-            print(f"✅ SUCCESS: {test_class} is syntactically valid, compiles, and is executable on attempt {attempt}.")
+            print(f"✅ SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
             return PipelineResult(True)
 
         if attempt >= config.attempts:
@@ -201,7 +201,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
                 record_compile_failure(config, test_class, validation_result)
                 delete_generated_test(output_test_file, f"{validation_result.stage} validation failed")
             else:
-                print(f"Keeping generated test file: {output_test_file}")
+                print(f"Keeping generated test file with assertion/runtime errors: {output_test_file}")
 
             return PipelineResult(False, f"{validation_result.stage} validation failed after max repair attempts")
 
@@ -246,7 +246,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
             result = run_pipeline(replace(config, source=source))
-            if not result:
+            if not result.succeeded:
                 failures.append((source, result.message))
         except Exception as exc:
             failures.append((source, str(exc)))
@@ -310,9 +310,9 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
     patterns = [
         ("junit_version_mismatch", r"org\.junit\.jupiter|jupiter.*does not exist|package org\.junit\.jupiter does not exist"),
         ("missing_import", r"package .+ does not exist|import .+ cannot be resolved"),
+        ("method_signature_mismatch", r"method .+ cannot be applied|no suitable method|actual and formal argument lists differ"),
         ("cannot_find_symbol", r"cannot find symbol|symbol:\s*(class|method|variable)"),
         ("constructor_mismatch", r"constructor .+ cannot be applied|no suitable constructor"),
-        ("method_signature_mismatch", r"method .+ cannot be applied|no suitable method|actual and formal argument lists differ"),
         ("access_modifier_error", r"has private access|has protected access|is not public in|cannot be accessed from outside package"),
         (
             "abstract_class_or_interface_instantiation",
