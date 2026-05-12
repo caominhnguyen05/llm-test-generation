@@ -1,5 +1,14 @@
 from ollama import chat
+import time
+
 from llm.config import SYSTEM_PROMPT
+
+
+LLM_TIMEOUT_SECONDS = 120
+
+
+class LLMGenerationTimeoutError(TimeoutError):
+    pass
 
 
 def generate_llm_response(prompt: str, model: str) -> str:
@@ -12,7 +21,10 @@ def generate_llm_response(prompt: str, model: str) -> str:
         stream=True,
     )
     llm_output = ""
+    started_at = time.monotonic()
     for chunk in stream:
+        if time.monotonic() - started_at > LLM_TIMEOUT_SECONDS:
+            raise LLMGenerationTimeoutError(f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds")
         token = chunk["message"]["content"]
         print(token, end="", flush=True) # Uncomment to see real-time test code generation
         llm_output += token
