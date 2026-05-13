@@ -7,7 +7,7 @@ import shutil
 import xml.etree.ElementTree as ET
 
 
-CSV_FILE = "csv_data/evosuite_results_small.csv"
+CSV_FILE = "csv_data/evosuite_results_one.csv"
 OUTPUT_DIR = Path("libraries_sample")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
@@ -398,7 +398,7 @@ def main():
                 else:
                     print(f"Compile failed with minimal pom.xml: {group_id}:{artifact_id}:{version}")
                     print(output.strip()[-4000:])
-                    delete_library(lib_dir, "library does not compile")
+                    # delete_library(lib_dir, "library does not compile")
 
     print("\nAll done!")
 
