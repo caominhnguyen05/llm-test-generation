@@ -10,7 +10,7 @@ from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
 from preprocess import assess_source_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
-from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_jacoco
+from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_pruned_jacoco
 
 REPO_ROOT = Path(__file__).resolve().parent
 COVERAGE_DIR = REPO_ROOT / "coverage"
@@ -35,8 +35,6 @@ COMPILE_FAILURE_SUMMARY_FIELDNAMES = [
     "compile_failures",
     "percentage",
 ]
-
-
 @dataclass(frozen=True)
 class PipelineResult:
     succeeded: bool
@@ -275,13 +273,14 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
     project = read_maven_project(config.library_path)
-    _, maven_output = run_jacoco(project.path, 300)
+    _, maven_output, prune_result = run_pruned_jacoco(project.path, 300)
     append_row(
         read_coverage(
             project,
             maven_output,
             testable_source_files=testable_source_files,
             generated_test_classes=generated_test_classes,
+            test_counts=prune_result.test_counts,
         ),
         LLM_COVERAGE_CSV,
     )
