@@ -1,0 +1,17 @@
+group_id,artifact_id,version,total_classes_under_test,total_llm_calls,initial_generation_calls,repair_calls,total_llm_generation_time_seconds,average_llm_generation_time_per_class_seconds,total_pipeline_runtime_seconds,average_pipeline_runtime_per_class_seconds,total_prompt_tokens,total_output_tokens,number_of_repair_attempts
+commons-cli,commons-cli,1.2,19,50,19,31,934.1202,49.1642,1217.235,64.065,118918,23425,2
+aopalliance,aopalliance,1,3,9,3,6,74.2318,24.7439,120.282,40.094,10754,1769,2
+com.github.lalyos,jfiglet,0.0.8,2,6,2,4,81.3411,40.6706,136.703,68.3515,13940,2085,2
+com.github.spotbugs,spotbugs-annotations,4.8.6,2,3,2,1,27.5382,13.7691,57.844,28.922,3142,749,2
+com.squareup.retrofit2,converter-gson,3.0.0,4,12,4,8,171.7292,42.9323,212.875,53.2188,17931,4778,2
+commons-logging,commons-logging,1.2,13,31,13,18,770.0701,59.2362,1069.438,82.2645,98392,19476,2
+io.jsonwebtoken,jjwt-jackson,0.11.2,2,6,2,4,177.8972,88.9486,337.563,168.7815,13783,3345,2
+io.swagger.core.v3,swagger-annotations,2.2.8,4,6,4,2,62.6904,15.6726,138.281,34.5703,5350,1299,2
+jakarta.transaction,jakarta.transaction-api,2.0.1,10,19,10,9,129.2434,12.9243,373.407,37.3407,21529,2932,2
+org.apache.commons,commons-csv,1.8,9,17,9,8,390.6479,43.4053,486.7960,54.0884,47872,9653,2
+org.apache.logging.log4j,log4j-to-slf4j,2.17.2,5,15,5,10,340.2889,68.0578,504.9380,100.9876,34732,9053,2
+org.checkerframework,checker-qual,3.12.0,3,8,3,5,159.3720,53.1240,251.9380,83.9793,22190,4058,2
+org.osgi,org.osgi.service.component,1.5.1,2,6,2,4,56.4534,28.2267,139.8600,69.9300,7614,895,2
+org.osgi,org.osgi.service.component.annotations,1.3.0,7,13,7,6,102.7163,14.6738,214.8590,30.6941,12729,1984,2
+org.osgi,org.osgi.service.metatype.annotations,1.3.0,1,1,1,0,14.5513,14.5513,46.7350,46.7350,1316,290,2
+org.hjson,hjson,3.0.0,14,36,14,22,788.5308,56.3236,1025.9060,73.2790,98526,20053,2
