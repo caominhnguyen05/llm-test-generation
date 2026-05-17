@@ -1,11 +1,12 @@
 import csv
 import re
 import sys
+import time
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from llm.main import generate_llm_response, get_generation_prompt, get_repair_prompt
+from llm.main import LLMCallMetrics, generate_llm_response, get_generation_prompt, get_repair_prompt
 from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
 from preprocess import assess_source_testability, extract_package_and_class, read_source_file
@@ -17,10 +18,27 @@ COVERAGE_DIR = REPO_ROOT / "coverage"
 if str(COVERAGE_DIR) not in sys.path:
     sys.path.insert(0, str(COVERAGE_DIR))
 
-LLM_COVERAGE_CSV = REPO_ROOT / "csv_data/llm_coverage.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "csv_data/llm_compile_failures.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "csv_data/llm_compile_failure_summary.csv"
+LLM_COVERAGE_CSV = REPO_ROOT / "results/llm_coverage_final.csv"
+LLM_RUNTIME_CSV = REPO_ROOT / "results/llm_runtime_final.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "results/llm_compile_failures.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/llm_compile_failure_summary.csv"
 
+LLM_RUNTIME_FIELDNAMES = [
+    "group_id",
+    "artifact_id",
+    "version",
+    "total_classes_under_test",
+    "total_llm_calls",
+    "initial_generation_calls",
+    "repair_calls",
+    "total_llm_generation_time_seconds",
+    "average_llm_generation_time_per_class_seconds",
+    "total_pipeline_runtime_seconds",
+    "average_pipeline_runtime_per_class_seconds",
+    "total_prompt_tokens",
+    "total_output_tokens",
+    "number_of_repair_attempts",
+]
 COMPILE_FAILURE_FIELDNAMES = [
     "library",
     "source_file",
@@ -42,6 +60,31 @@ class PipelineResult:
 
     def __bool__(self) -> bool:
         return self.succeeded
+
+
+@dataclass
+class LibraryRuntimeMetrics:
+    total_llm_calls: int = 0
+    initial_generation_calls: int = 0
+    repair_calls: int = 0
+    total_llm_generation_time_ns: int = 0
+    total_prompt_tokens: int = 0
+    total_output_tokens: int = 0
+    total_pipeline_runtime_seconds: float = 0.0
+
+    def record_initial_call(self, metrics: LLMCallMetrics) -> None:
+        self.initial_generation_calls += 1
+        self._record_call(metrics)
+
+    def record_repair_call(self, metrics: LLMCallMetrics) -> None:
+        self.repair_calls += 1
+        self._record_call(metrics)
+
+    def _record_call(self, metrics: LLMCallMetrics) -> None:
+        self.total_llm_calls += 1
+        self.total_llm_generation_time_ns += metrics.total_duration_ns
+        self.total_prompt_tokens += metrics.prompt_tokens
+        self.total_output_tokens += metrics.output_tokens
 
 
 def iter_library_sources(config: PipelineConfig) -> list[Path]:
@@ -87,17 +130,26 @@ def save_test_code(output_test_file: Path, test_code: str, class_name: str, labe
     print(f"{label} test saved to {output_test_file}")
 
 
-def generate_initial_test(config: PipelineConfig, source_code: str, package_name: str, class_name: str) -> str:
+def generate_initial_test(
+    config: PipelineConfig,
+    source_code: str,
+    package_name: str,
+    class_name: str,
+    metrics: LibraryRuntimeMetrics | None = None,
+) -> str:
     """Ask the LLM to generate the first version of the JUnit test class.
 
     The raw LLM response is normalized so the result is a complete Java test
     file with the expected package and class name.
     """
     print(f"\n[Attempt 0] Asking Ollama ({config.model}) to generate tests...")
-    llm_output = generate_llm_response(
+    llm_output, call_metrics = generate_llm_response(
         get_generation_prompt(source_code, package_name, class_name),
         config.model,
+        return_metrics=True,
     )
+    if metrics is not None:
+        metrics.record_initial_call(call_metrics)
     return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
@@ -108,6 +160,7 @@ def generate_repair_test(
     source_code: str,
     package_name: str,
     class_name: str,
+    metrics: LibraryRuntimeMetrics | None = None,
 ) -> str:
     """Ask the LLM to repair a generated test after validation fails.
 
@@ -116,10 +169,13 @@ def generate_repair_test(
     execution problems.
     """
     print(f"Asking Ollama ({config.model}) to repair the test...")
-    llm_output = generate_llm_response(
+    llm_output, call_metrics = generate_llm_response(
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
         config.model,
+        return_metrics=True,
     )
+    if metrics is not None:
+        metrics.record_repair_call(call_metrics)
     return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
@@ -145,7 +201,7 @@ def validate_generated_test(config: PipelineConfig, test_code: str, test_class: 
     return ValidationResult(True, "complete", runtime_result.message)
 
 
-def run_pipeline(config: PipelineConfig) -> PipelineResult:
+def run_pipeline(config: PipelineConfig, metrics: LibraryRuntimeMetrics | None = None) -> PipelineResult:
     """Generate, save, validate, and repair a test for one Java source file.
 
     The pipeline reads the target source file, asks the LLM for an initial test,
@@ -172,7 +228,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     print(f"  Output: {output_test_file}")
 
     try:
-        test_code = generate_initial_test(config, source_code, package_name, class_name)
+        test_code = generate_initial_test(config, source_code, package_name, class_name, metrics)
         save_test_code(output_test_file, test_code, class_name, "Initial")
     except Exception as exc:
         print(f"Failed while generating {test_class}: {exc}")
@@ -216,6 +272,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
                 source_code,
                 package_name,
                 class_name,
+                metrics,
             )
             save_test_code(output_test_file, test_code, class_name, "Repaired")
         except Exception as exc:
@@ -232,9 +289,13 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     If one test class fails to compile or run, the error is logged and the pipeline
     continues with the next source file.
     """
+    pipeline_started_at = time.monotonic()
+    metrics = LibraryRuntimeMetrics()
     sources = iter_library_sources(config)
     if not sources:
         print(f"No Java source files found under {config.source_root}")
+        metrics.total_pipeline_runtime_seconds = time.monotonic() - pipeline_started_at
+        append_library_runtime_metrics(config, 0, metrics)
         return
 
     failures: list[tuple[Path, str]] = []
@@ -243,7 +304,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
-            result = run_pipeline(replace(config, source=source))
+            result = run_pipeline(replace(config, source=source), metrics)
             if not result.succeeded:
                 failures.append((source, result.message))
         except Exception as exc:
@@ -263,10 +324,14 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     if generated_test_classes == 0:
         print("\nSkipping JaCoCo coverage because no generated test classes survived.")
         write_compile_failure_summary()
+        metrics.total_pipeline_runtime_seconds = time.monotonic() - pipeline_started_at
+        append_library_runtime_metrics(config, len(sources), metrics)
         return
 
     append_library_coverage(config, len(sources), generated_test_classes)
     write_compile_failure_summary()
+    metrics.total_pipeline_runtime_seconds = time.monotonic() - pipeline_started_at
+    append_library_runtime_metrics(config, len(sources), metrics)
 
 
 def append_library_coverage(config: PipelineConfig, testable_source_files: int, generated_test_classes: int) -> None:
@@ -285,6 +350,35 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
         LLM_COVERAGE_CSV,
     )
     print(f"Coverage row written to {LLM_COVERAGE_CSV}")
+
+
+def append_library_runtime_metrics(
+    config: PipelineConfig,
+    total_classes_under_test: int,
+    metrics: LibraryRuntimeMetrics,
+) -> None:
+    """Append one per-library runtime and LLM usage row."""
+    project = read_maven_project(config.library_path)
+    total_llm_seconds = metrics.total_llm_generation_time_ns / 1_000_000_000
+    total_pipeline_seconds = metrics.total_pipeline_runtime_seconds
+    row = {
+        "group_id": project.group_id,
+        "artifact_id": project.artifact_id,
+        "version": project.version,
+        "total_classes_under_test": str(total_classes_under_test),
+        "total_llm_calls": str(metrics.total_llm_calls),
+        "initial_generation_calls": str(metrics.initial_generation_calls),
+        "repair_calls": str(metrics.repair_calls),
+        "total_llm_generation_time_seconds": f"{total_llm_seconds:.4f}",
+        "average_llm_generation_time_per_class_seconds": _average_seconds(total_llm_seconds, total_classes_under_test),
+        "total_pipeline_runtime_seconds": f"{total_pipeline_seconds:.4f}",
+        "average_pipeline_runtime_per_class_seconds": _average_seconds(total_pipeline_seconds, total_classes_under_test),
+        "total_prompt_tokens": str(metrics.total_prompt_tokens),
+        "total_output_tokens": str(metrics.total_output_tokens),
+        "number_of_repair_attempts": str(config.attempts),
+    }
+    append_csv_row(LLM_RUNTIME_CSV, LLM_RUNTIME_FIELDNAMES, row)
+    print(f"Runtime metrics row written to {LLM_RUNTIME_CSV}")
 
 
 def count_generated_test_classes(config: PipelineConfig, sources: list[Path]) -> int:
@@ -390,6 +484,12 @@ def append_csv_row(output_path: Path, fieldnames: list[str], row: dict[str, str]
 
 def compact_csv_message(message: str) -> str:
     return re.sub(r"\s+", " ", message).strip()[-1000:]
+
+
+def _average_seconds(total_seconds: float, count: int) -> str:
+    if count == 0:
+        return ""
+    return f"{total_seconds / count:.4f}"
 
 
 def delete_generated_test(output_test_file: Path, reason: str) -> None:
