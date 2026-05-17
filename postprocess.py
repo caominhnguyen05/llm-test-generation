@@ -32,7 +32,6 @@ def extract_java_code(llm_output: str, expected_class: str | None = None) -> str
                 return block
         if contains_class_declaration(llm_output, expected_class):
             return llm_output.strip()
-        raise ValueError(f"Generated code does not contain class {expected_class}.")
 
     if java_blocks:
         return java_blocks[0]
@@ -145,19 +144,8 @@ def normalize_test_code(test_code: str, package_name: str, class_name: str, sour
         test_code,
         count=1,
     )
-    if not re.search(rf"\bclass\s+{re.escape(expected_class)}\b", test_code):
-        raise ValueError(f"Generated code does not contain class {expected_class}.")
 
     imports = set(existing_imports) | infer_missing_imports(test_code, source_code)
     imports_block = "\n".join(sorted(imports))
 
     return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
-
-
-def test_class_syntax_check(test_code: str, class_name: str) -> list[str]:
-    issues = []
-    if f"public class {class_name}Test" not in test_code:
-        issues.append(f"missing public class {class_name}Test declaration")
-    if "@Test" not in test_code:
-        issues.append("missing @Test method annotation")
-    return issues

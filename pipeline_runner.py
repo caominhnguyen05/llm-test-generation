@@ -10,7 +10,7 @@ from llm.main import LLMCallMetrics, generate_llm_response, get_generation_promp
 from pipeline_config import PipelineConfig
 from postprocess import normalize_test_code, write_file
 from preprocess import assess_source_testability, extract_package_and_class, read_source_file
-from validation import ValidationResult, validate_compile, validate_runtime, validate_syntax
+from validation import ValidationResult, validate_compile, validate_runtime, validate_structure
 from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_pruned_jacoco
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -123,9 +123,9 @@ def validate_inputs(config: PipelineConfig) -> bool:
 
 def save_test_code(output_test_file: Path, test_code: str, class_name: str, label: str) -> None:
     """Save the generated test code to the library src/test/java folder, creating directories as needed."""
-    syntax_result = validate_syntax(test_code, class_name)
-    if not syntax_result.passed:
-        print(f"Quick syntax warnings before Maven: {syntax_result.message}")
+    structure_result = validate_structure(test_code, class_name)
+    if not structure_result.passed:
+        print(f"Quick structure warnings before Maven: {structure_result.message}")
     write_file(output_test_file, test_code)
     print(f"{label} test saved to {output_test_file}")
 
@@ -165,7 +165,7 @@ def generate_repair_test(
     """Ask the LLM to repair a generated test after validation fails.
 
     The repair prompt includes the current test, the source under test, and the
-    validation error output so the model can fix syntax, compile, or runtime
+    validation error output so the model can fix structure, compile, or runtime
     execution problems.
     """
     print(f"Asking Ollama ({config.model}) to repair the test...")
@@ -180,15 +180,15 @@ def generate_repair_test(
 
 
 def validate_generated_test(config: PipelineConfig, test_code: str, test_class: str) -> ValidationResult:
-    """Validate a generated test through syntax, compile, and runtime checks.
+    """Validate a generated test through structure, compile, and runtime checks.
 
     Validation stops at the first failing stage so the repair loop receives the
     most relevant error message. Runtime validation checks whether Maven can run
     the test class; depending on Maven settings, assertion failures may be kept.
     """
-    syntax_result = validate_syntax(test_code, test_class.removesuffix("Test"))
-    if not syntax_result.passed:
-        return syntax_result
+    structure_result = validate_structure(test_code, test_class.removesuffix("Test"))
+    if not structure_result.passed:
+        return structure_result
 
     compile_result = validate_compile(config, test_class)
     if not compile_result.passed:
@@ -227,22 +227,12 @@ def run_pipeline(config: PipelineConfig, metrics: LibraryRuntimeMetrics | None =
     print(f"  Class: {class_name}")
     print(f"  Output: {output_test_file}")
 
-    try:
-        test_code = generate_initial_test(config, source_code, package_name, class_name, metrics)
-        save_test_code(output_test_file, test_code, class_name, "Initial")
-    except Exception as exc:
-        print(f"Failed while generating {test_class}: {exc}")
-        delete_generated_test(output_test_file, f"generation exception: {exc}")
-        return PipelineResult(False, f"generation failed: {exc}")
+    test_code = generate_initial_test(config, source_code, package_name, class_name, metrics)
+    save_test_code(output_test_file, test_code, class_name, "Initial")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
-        try:
-            validation_result = validate_generated_test(config, test_code, test_class)
-        except Exception as exc:
-            print(f"Failed while validating {test_class}: {exc}")
-            delete_generated_test(output_test_file, f"validation exception: {exc}")
-            return PipelineResult(False, f"validation exception: {exc}")
+        validation_result = validate_generated_test(config, test_code, test_class)
 
         if validation_result.passed:
             print(f"✅ SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
@@ -251,7 +241,7 @@ def run_pipeline(config: PipelineConfig, metrics: LibraryRuntimeMetrics | None =
         if attempt >= config.attempts:
             print(f"❌ FAILURE: max repair attempts ({config.attempts}) reached.")
             print(f"❌ Validation failed for {test_class}: {validation_result.message}")
-            if validation_result.stage in {"compile", "syntax"}:
+            if validation_result.stage in {"compile", "structure"}:
                 record_compile_failure(config, test_class, validation_result)
                 delete_generated_test(output_test_file, f"{validation_result.stage} validation failed")
             else:
@@ -264,21 +254,16 @@ def run_pipeline(config: PipelineConfig, metrics: LibraryRuntimeMetrics | None =
         print(f"Error: {validation_result.message}")
         print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
 
-        try:
-            test_code = generate_repair_test(
-                config,
-                test_code,
-                validation_result,
-                source_code,
-                package_name,
-                class_name,
-                metrics,
-            )
-            save_test_code(output_test_file, test_code, class_name, "Repaired")
-        except Exception as exc:
-            print(f"Failed while repairing {test_class}: {exc}")
-            delete_generated_test(output_test_file, f"repair exception: {exc}")
-            return PipelineResult(False, f"repair failed: {exc}")
+        test_code = generate_repair_test(
+            config,
+            test_code,
+            validation_result,
+            source_code,
+            package_name,
+            class_name,
+            metrics,
+        )
+        save_test_code(output_test_file, test_code, class_name, "Repaired")
 
     return PipelineResult(False, "validation failed")
 
@@ -396,8 +381,8 @@ def count_generated_test_classes(config: PipelineConfig, sources: list[Path]) ->
 
 def categorize_compile_error(message: str, stage: str = "compile") -> str:
     """Return a coarse regex-based category for a Maven compile error."""
-    if stage == "syntax":
-        return "syntax_error"
+    if stage == "structure":
+        return "structure_error"
 
     normalized = message.lower()
     patterns = [
@@ -423,7 +408,7 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
 
 
 def record_compile_failure(config: PipelineConfig, test_class: str, validation_result: ValidationResult) -> None:
-    """Append one compile/syntax failure row before deleting the generated test."""
+    """Append one compile/structure failure row before deleting the generated test."""
     category = categorize_compile_error(validation_result.message, validation_result.stage)
     row = {
         "library": config.library,
