@@ -56,8 +56,6 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
             timeout=MAVEN_TIMEOUT_SECONDS,
         )
 
-    print((result.stdout + result.stderr)[-2000:])
-
     if result.returncode == 0:
         print(f"✅ {test_class} compiled successfully.")
         return True, ""
