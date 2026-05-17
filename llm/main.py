@@ -1,5 +1,6 @@
 from ollama import chat
 import time
+from dataclasses import dataclass
 
 from llm.config import SYSTEM_PROMPT
 
@@ -11,7 +12,14 @@ class LLMGenerationTimeoutError(TimeoutError):
     pass
 
 
-def generate_llm_response(prompt: str, model: str) -> str:
+@dataclass(frozen=True)
+class LLMCallMetrics:
+    total_duration_ns: int = 0
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+
+
+def generate_llm_response(prompt: str, model: str, return_metrics: bool = False) -> str | tuple[str, LLMCallMetrics]:
     stream = chat(
         model=model,
         messages=[
@@ -19,16 +27,28 @@ def generate_llm_response(prompt: str, model: str) -> str:
             {"role": "user", "content": prompt},
         ],
         stream=True,
+        # options={
+        #     "temperature": 0,
+        # }
     )
     llm_output = ""
+    metrics = LLMCallMetrics()
     started_at = time.monotonic()
     for chunk in stream:
         if time.monotonic() - started_at > LLM_TIMEOUT_SECONDS:
             raise LLMGenerationTimeoutError(f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds")
-        token = chunk["message"]["content"]
+        if chunk.get("done"):
+            metrics = LLMCallMetrics(
+                total_duration_ns=int(chunk.get("total_duration") or 0),
+                prompt_tokens=int(chunk.get("prompt_eval_count") or 0),
+                output_tokens=int(chunk.get("eval_count") or 0),
+            )
+        token = chunk.get("message", {}).get("content", "")
         print(token, end="", flush=True) # Uncomment to see real-time test code generation
         llm_output += token
     print("\n\nGeneration complete.\n")
+    if return_metrics:
+        return llm_output, metrics
     return llm_output
 
 
