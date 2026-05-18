@@ -11,11 +11,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from llm.config import available_model_names
 from pipeline_config import (
     DEFAULT_LIBRARIES_ROOT,
-    DEFAULT_MAX_REPAIR_ATTEMPTS,
-    DEFAULT_OLLAMA_MODEL_NAME,
+    MAX_REPAIR_ATTEMPTS,
     coordinate_to_path,
 )
 
@@ -274,37 +272,17 @@ def pipeline_tab(libraries: list[str]) -> None:
         st.error("No libraries found in libraries_initial.")
         return
 
-    col_a, col_b, col_c = st.columns([1.25, 1.25, 0.8])
-    library = col_a.selectbox("Library", libraries)
-    mode = col_b.segmented_control("Mode", ["Single class", "Whole library"], default="Single class")
-    model = col_c.selectbox("Model", available_model_names(), index=available_model_names().index(DEFAULT_OLLAMA_MODEL_NAME))
-    attempts = st.slider("Repair attempts", 0, 5, DEFAULT_MAX_REPAIR_ATTEMPTS)
-
-    sources = source_files(library)
-    selected_source = None
-    if mode == "Single class":
-        if not sources:
-            st.warning("This library has no Java source files.")
-            return
-        selected_source = st.selectbox("Source file", sources)
+    library = st.selectbox("Library", libraries)
+    attempts = st.slider("Repair attempts", 0, 5, MAX_REPAIR_ATTEMPTS)
 
     command = [sys.executable, "-u", "-c"]
-    if mode == "Whole library":
-        code = (
-            "from pipeline_config import PipelineConfig; "
-            "from pipeline_runner import run_library_pipeline; "
-            f"run_library_pipeline(PipelineConfig(library={library!r}, source=__import__('pathlib').Path(''), "
-            f"model=__import__('llm.config').config.get_model({model!r}), attempts={attempts}))"
-        )
-    else:
-        code = (
-            "from pathlib import Path; "
-            "from pipeline_config import PipelineConfig; "
-            "from pipeline_runner import run_pipeline; "
-            "from llm.config import get_model; "
-            f"run_pipeline(PipelineConfig(library={library!r}, source=Path({selected_source!r}), "
-            f"model=get_model({model!r}), attempts={attempts}))"
-        )
+    code = (
+        "from pathlib import Path; "
+        "from pipeline_config import DEFAULT_LIBRARIES_ROOT, PipelineConfig; "
+        "from pipeline_runner import run_library_pipeline; "
+        f"run_library_pipeline(PipelineConfig(library={library!r}, attempts={attempts}, "
+        "libraries_root=Path(DEFAULT_LIBRARIES_ROOT)))"
+    )
     command.append(code)
 
     if st.button("Run Pipeline", use_container_width=True):

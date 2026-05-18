@@ -2,6 +2,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent
 OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_LIBRARIES_ROOT = Path("libraries_no_repair")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
@@ -10,12 +11,18 @@ MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
 ERROR_CONTEXT_CHARS = 5000
 
+LLM_COVERAGE_CSV = REPO_ROOT / "results/coverage_no_repair.csv"
+LLM_RUNTIME_CSV = REPO_ROOT / "results/runtime_no_repair.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "results/llm_compile_failures.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/llm_compile_failure_summary.csv"
+
 
 @dataclass(frozen=True)
 class PipelineConfig:
     library: str
     attempts: int
     libraries_root: Path
+    model: str = OLLAMA_MODEL
 
     @property
     def library_path(self) -> Path:
