@@ -1,11 +1,7 @@
 from ollama import chat
 import time
 from dataclasses import dataclass
-
-from llm.config import SYSTEM_PROMPT
-
-
-LLM_TIMEOUT_SECONDS = 120
+from llm.config import SYSTEM_PROMPT, LLM_TIMEOUT_SECONDS
 
 
 class LLMGenerationTimeoutError(TimeoutError):
@@ -27,9 +23,10 @@ def generate_llm_response(prompt: str, model: str, return_metrics: bool = False)
             {"role": "user", "content": prompt},
         ],
         stream=True,
-        # options={
-        #     "temperature": 0,
-        # }
+        options={
+            "temperature": 0,
+            "seed": 42,
+        }
     )
     llm_output = ""
     metrics = LLMCallMetrics()
@@ -44,7 +41,7 @@ def generate_llm_response(prompt: str, model: str, return_metrics: bool = False)
                 output_tokens=int(chunk.get("eval_count") or 0),
             )
         token = chunk.get("message", {}).get("content", "")
-        print(token, end="", flush=True) # Uncomment to see real-time test code generation
+        print(token, end="", flush=True)
         llm_output += token
     print("\n\nGeneration complete.\n")
     if return_metrics:
