@@ -1,5 +1,0 @@
-,instruction_coverage,instruction_coverage,instruction_coverage,instruction_coverage,instruction_coverage,branch_coverage,branch_coverage,branch_coverage,branch_coverage,branch_coverage,line_coverage,line_coverage,line_coverage,line_coverage,line_coverage,complexity_coverage,complexity_coverage,complexity_coverage,complexity_coverage,complexity_coverage,method_coverage,method_coverage,method_coverage,method_coverage,method_coverage,class_coverage,class_coverage,class_coverage,class_coverage,class_coverage
-,mean,median,std,min,max,mean,median,std,min,max,mean,median,std,min,max,mean,median,std,min,max,mean,median,std,min,max,mean,median,std,min,max
-source,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
-EVOSUITE,68.04,68.01,23.96,21.13,100.0,51.66,56.26,33.87,0.0,100.0,71.2,72.26,24.78,17.43,100.0,69.37,71.88,26.8,12.05,100.0,76.73,84.62,22.56,26.67,100.0,84.04,92.82,19.63,42.86,100.0
-LLM,37.59,30.04,31.0,0.0,100.0,19.52,11.62,22.74,0.0,75.0,39.23,30.82,31.39,0.0,100.0,35.38,24.86,31.61,0.0,100.0,41.69,31.87,29.95,0.0,100.0,55.79,60.0,29.26,0.0,100.0
