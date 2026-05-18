@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-
 from maven_helpers import run_maven_test_compile, run_maven_test_runtime
 from pipeline_config import PipelineConfig
 
