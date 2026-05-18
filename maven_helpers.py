@@ -43,9 +43,7 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
         "test-compile",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
-        f"-Dmaven.compiler.testIncludes=**/{test_class}.java",
     ]
-
 
     with only_test_class_visible(library_path, test_class):
         result = subprocess.run(
