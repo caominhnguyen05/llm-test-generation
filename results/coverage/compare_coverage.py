@@ -44,7 +44,7 @@ def main() -> None:
     root_dir = Path(__file__).resolve().parents[1]
 
     # Load CSV files
-    llm = load_coverage_csv(root_dir / "results" / "llm_coverage_final.csv")
+    llm = load_coverage_csv(root_dir / "results" / "coverage" /"llm_coverage_final.csv")
     evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_results.csv")
 
     # Find libraries that exist in both CSV files.
@@ -55,7 +55,6 @@ def main() -> None:
     if common_libraries.empty:
         raise ValueError("No matching rows found between LLM and EvoSuite CSV files.")
 
-    # Stack both datasets, then keep only libraries that have both LLM and EvoSuite rows.
     df = pd.concat([llm, evosuite], ignore_index=True)
     df = df.merge(common_libraries, on=KEY_COLUMNS, how="inner")
 
