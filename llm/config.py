@@ -1,9 +1,4 @@
-OLLAMA_MODELS = {
-    "qwen_coder_small": "qwen2.5-coder:7b",
-    "qwen3": "qwen3:8b",
-    "deepseek_coder": "deepseek-coder:6.7b",
-    "codellama": "codellama:7b",
-}
+LLM_TIMEOUT_SECONDS = 180
 
 SYSTEM_PROMPT = """
 You are an expert Java test engineer generating JUnit 4 tests for an existing Maven project.
@@ -20,14 +15,3 @@ with valid tests covering similar behavior.
 Output only one complete Java test file inside a single ```java fenced code block. Do not include explanations,
 analysis, markdown outside the code block, or partial snippets.
 """.strip()
-
-def available_model_names() -> list[str]:
-    return sorted(OLLAMA_MODELS)
-
-def get_model(name: str) -> str:
-    if name not in OLLAMA_MODELS:
-        raise ValueError(
-            f"Unknown model '{name}'. "
-            f"Available options: {list(OLLAMA_MODELS.keys())}"
-        )
-    return OLLAMA_MODELS[name]
