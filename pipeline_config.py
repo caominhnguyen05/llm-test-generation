@@ -11,8 +11,8 @@ MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
 ERROR_CONTEXT_CHARS = 5000
 
-LLM_COVERAGE_CSV = REPO_ROOT / "results/coverage_no_repair.csv"
-LLM_RUNTIME_CSV = REPO_ROOT / "results/runtime_no_repair.csv"
+LLM_COVERAGE_CSV = REPO_ROOT / "results/coverage/coverage_no_repair.csv"
+LLM_RUNTIME_CSV = REPO_ROOT / "results/cost/runtime_no_repair.csv"
 COMPILE_FAILURES_CSV = REPO_ROOT / "results/llm_compile_failures.csv"
 COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/llm_compile_failure_summary.csv"
 
@@ -22,6 +22,8 @@ class PipelineConfig:
     library: str
     attempts: int
     libraries_root: Path
+    libraries_csv: Path | None = None
+    record_failures: bool = True
     model: str = OLLAMA_MODEL
 
     @property
@@ -65,13 +67,41 @@ def parse_args() -> PipelineConfig:
         help="Maximum number of repair attempts per generated test.",
     )
 
+    parser.add_argument(
+        "--record_failures",
+        type=parse_bool,
+        default=True,
+        help="Whether to record compile/structure failures to CSV. Use --record_failures=False to disable.",
+    )
+
+    parser.add_argument(
+        "--libraries_csv",
+        type=Path,
+        default=None,
+        help="CSV file containing group_id, artifact_id, and version columns.",
+    )
+
     args = parser.parse_args()
 
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
         libraries_root=args.libraries_root,
+        libraries_csv=args.libraries_csv,
+        record_failures=args.record_failures,
     )
+
+
+def parse_bool(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise argparse.ArgumentTypeError("Expected true or false.")
 
 
 def coordinate_to_path(libraries_root: Path, library: str) -> Path:
