@@ -1,6 +1,33 @@
 import re
 from pathlib import Path
 
+JUNIT4_IMPORTS = {
+    "import org.junit.Test;",
+    "import static org.junit.Assert.*;",
+}
+
+JUNIT_SYMBOL_IMPORTS = {
+    "@Before": "import org.junit.Before;",
+    "@After": "import org.junit.After;",
+    "@BeforeClass": "import org.junit.BeforeClass;",
+    "@AfterClass": "import org.junit.AfterClass;",
+}
+
+JAVA_SYMBOL_IMPORTS = {
+    "Arrays.": "import java.util.Arrays;",
+    "Collections.": "import java.util.Collections;",
+    "Collection<": "import java.util.Collection;",
+    "Date": "import java.util.Date;",
+    "Comparator<": "import java.util.Comparator;",
+    "List<": "import java.util.List;",
+    "Map<": "import java.util.Map;",
+    "Set<": "import java.util.Set;",
+    "IOException": "import java.io.IOException;",
+    "StringReader": "import java.io.StringReader;",
+    "StringWriter": "import java.io.StringWriter;",
+    "ByteArrayInputStream": "import java.io.ByteArrayInputStream;",
+    "ByteArrayOutputStream": "import java.io.ByteArrayOutputStream;",
+}
 
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,16 +98,14 @@ def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
     for import_line in imports:
         import_line = import_line.strip()
 
-        # Remove JUnit 3 imports
-        if import_line.startswith("import junit.framework."):
-            continue
-        if import_line.startswith("import static junit.framework."):
-            continue
+        wrong_junit_imports = (
+            "import junit.framework.",
+            "import static junit.framework.",
+            "import org.junit.jupiter.",
+            "import static org.junit.jupiter."
+        )
 
-        # Remove JUnit 5 imports
-        if import_line.startswith("import org.junit.jupiter."):
-            continue
-        if import_line.startswith("import static org.junit.jupiter."):
+        if import_line.startswith(wrong_junit_imports):
             continue
         cleaned_imports.append(import_line)
 
@@ -92,37 +117,14 @@ def strip_package_declarations(test_code: str) -> str:
 
 
 def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
-    imports = {
-        "import org.junit.Test;",
-        "import static org.junit.Assert.*;",
-    }
+    """Infer imports commonly needed by generated JUnit 4 tests."""
+    imports = set(JUNIT4_IMPORTS)
 
-    junit_symbols = {
-        "@Before": "import org.junit.Before;",
-        "@After": "import org.junit.After;",
-        "@BeforeClass": "import org.junit.BeforeClass;",
-        "@AfterClass": "import org.junit.AfterClass;",
-    }
-    for symbol, import_line in junit_symbols.items():
+    for symbol, import_line in JUNIT_SYMBOL_IMPORTS.items():
         if symbol in test_code:
             imports.add(import_line)
 
-    java_symbols = {
-        "Arrays.": "import java.util.Arrays;",
-        "Collections.": "import java.util.Collections;",
-        "Collection<": "import java.util.Collection;",
-        "Date": "import java.util.Date;",
-        "Comparator<": "import java.util.Comparator;",
-        "List<": "import java.util.List;",
-        "Map<": "import java.util.Map;",
-        "Set<": "import java.util.Set;",
-        "IOException": "import java.io.IOException;",
-        "StringReader": "import java.io.StringReader;",
-        "StringWriter": "import java.io.StringWriter;",
-        "ByteArrayInputStream": "import java.io.ByteArrayInputStream;",
-        "ByteArrayOutputStream": "import java.io.ByteArrayOutputStream;",
-    }
-    for symbol, import_line in java_symbols.items():
+    for symbol, import_line in JAVA_SYMBOL_IMPORTS.items():
         if symbol in test_code:
             imports.add(import_line)
 
