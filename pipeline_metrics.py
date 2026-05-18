@@ -37,13 +37,13 @@ class LibraryRuntimeMetrics:
 
     def record_initial_call(self, metrics: LLMCallMetrics) -> None:
         self.initial_generation_calls += 1
-        self._record_call(metrics)
+        self.record_call(metrics)
 
     def record_repair_call(self, metrics: LLMCallMetrics) -> None:
         self.repair_calls += 1
-        self._record_call(metrics)
+        self.record_call(metrics)
 
-    def _record_call(self, metrics: LLMCallMetrics) -> None:
+    def record_call(self, metrics: LLMCallMetrics) -> None:
         self.total_llm_calls += 1
         self.total_llm_generation_time_ns += metrics.total_duration_ns
         self.total_prompt_tokens += metrics.prompt_tokens
@@ -54,11 +54,10 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
     project = read_maven_project(config.library_path)
-    _, maven_output, prune_result = run_pruned_jacoco(project.path, 300)
+    _, prune_result = run_pruned_jacoco(project.path, 300)
     append_row(
         read_coverage(
             project,
-            maven_output,
             testable_source_files=testable_source_files,
             generated_test_classes=generated_test_classes,
             test_counts=prune_result.test_counts,
@@ -66,6 +65,37 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
         LLM_COVERAGE_CSV,
     )
     print(f"Coverage row written to {LLM_COVERAGE_CSV}")
+
+
+def append_zero_library_coverage(config: PipelineConfig, testable_source_files: int) -> None:
+    """Append a zero-coverage row when no generated test class survived."""
+    project = read_maven_project(config.library_path)
+    append_row(
+        {
+            "group_id": project.group_id,
+            "artifact_id": project.artifact_id,
+            "version": project.version,
+            "source": "LLM",
+            "instruction_coverage": "0",
+            "branch_coverage": "0",
+            "line_coverage": "0",
+            "complexity_coverage": "0",
+            "method_coverage": "0",
+            "class_coverage": "0",
+            "testable_source_files": str(testable_source_files),
+            "generated_test_classes": "0",
+            "compilation_success_rate": "0",
+            "tests_total": "0",
+            "tests_passed": "0",
+            "tests_failed_assertions": "0",
+            "tests_runtime_errors": "0",
+            "runtime_success_rate": "0",
+            "failed_assertion_rate": "0",
+            "runtime_error_rate": "0",
+        },
+        LLM_COVERAGE_CSV,
+    )
+    print(f"Zero coverage row written to {LLM_COVERAGE_CSV}")
 
 
 def append_library_runtime_metrics(
