@@ -34,7 +34,8 @@ def strip_comments_and_strings(source_code: str) -> str:
     return source_code
 
 
-def _find_top_level_declaration(source_code: str, class_name: str) -> re.Match[str] | None:
+def find_top_level_declaration(source_code: str, class_name: str) -> re.Match[str] | None:
+    """Find the main class/interface/enum declaration matching the file name."""
     return re.search(
         rf"\b(?:public|protected|private|abstract|final|static|\s)*"
         rf"(class|interface|enum|@interface)\s+{re.escape(class_name)}\b",
@@ -42,7 +43,8 @@ def _find_top_level_declaration(source_code: str, class_name: str) -> re.Match[s
     )
 
 
-def _body_after_declaration(source_code: str, declaration: re.Match[str]) -> str:
+def body_after_declaration(source_code: str, declaration: re.Match[str]) -> str:
+    """Return the text inside the outer class/interface/enum body."""
     body_start = source_code.find("{", declaration.end())
     body_end = source_code.rfind("}")
     if body_start == -1 or body_end == -1 or body_end <= body_start:
@@ -50,7 +52,8 @@ def _body_after_declaration(source_code: str, declaration: re.Match[str]) -> str
     return source_code[body_start + 1 : body_end]
 
 
-def _has_method_body(source_code: str) -> bool:
+def has_method_body(source_code: str) -> bool:
+    """Check whether the source contains at least one method with a body."""
     return bool(
         re.search(
             r"\b(?:public|protected|private|static|final|synchronized|native|\s)+"
@@ -60,7 +63,8 @@ def _has_method_body(source_code: str) -> bool:
     )
 
 
-def _has_constructor_body(source_code: str, class_name: str) -> bool:
+def has_constructor_body(source_code: str, class_name: str) -> bool:
+    """Check whether the class contains a constructor with a body."""
     return bool(
         re.search(
             rf"\b(?:public|protected|private|\s)*{re.escape(class_name)}\s*"
@@ -70,8 +74,8 @@ def _has_constructor_body(source_code: str, class_name: str) -> bool:
     )
 
 
-def _is_constant_only_class(source_code: str, class_name: str) -> bool:
-    if _has_method_body(source_code) or _has_constructor_body(source_code, class_name):
+def is_constant_only_class(source_code: str, class_name: str) -> bool:
+    if has_method_body(source_code) or has_constructor_body(source_code, class_name):
         return False
 
     fields = re.findall(
@@ -82,24 +86,24 @@ def _is_constant_only_class(source_code: str, class_name: str) -> bool:
     return bool(fields)
 
 
-def _is_simple_enum(body: str) -> bool:
+def is_simple_enum(body: str) -> bool:
     body_without_constants = body.split(";", 1)[1] if ";" in body else ""
-    return not _has_method_body(body_without_constants)
+    return not has_method_body(body_without_constants)
 
 
-def assess_source_testability(java_file: Path, source_root: Path) -> TestabilityDecision:
-    """Heuristically skip source files that are unlikely to produce useful tests."""
+def check_testability(java_file: Path, source_root: Path) -> TestabilityDecision:
+    """Decide whether a Java source file is worth testing."""
     if java_file.name in {"package-info.java", "module-info.java"}:
         return TestabilityDecision(False, "metadata source file")
 
     source_code = strip_comments_and_strings(read_source_file(java_file))
     _, class_name = extract_package_and_class(java_file, source_root)
-    declaration = _find_top_level_declaration(source_code, class_name)
+    declaration = find_top_level_declaration(source_code, class_name)
     if declaration is None:
         return TestabilityDecision(False, "no matching top-level Java type declaration")
 
     kind = declaration.group(1)
-    body = _body_after_declaration(source_code, declaration)
+    body = body_after_declaration(source_code, declaration)
 
     if kind == "@interface":
         return TestabilityDecision(False, "annotation type")
@@ -109,10 +113,10 @@ def assess_source_testability(java_file: Path, source_root: Path) -> Testability
         if not has_default_or_static_method:
             return TestabilityDecision(False, "interface without executable default/static methods")
 
-    if kind == "enum" and _is_simple_enum(body):
+    if kind == "enum" and is_simple_enum(body):
         return TestabilityDecision(False, "enum with constants only")
 
-    if kind == "class" and _is_constant_only_class(body, class_name):
+    if kind == "class" and is_constant_only_class(body, class_name):
         return TestabilityDecision(False, "constant-only class")
 
     return TestabilityDecision(True)
