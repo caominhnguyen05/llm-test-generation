@@ -5,8 +5,13 @@ from pathlib import Path
 from pipeline_config import PipelineConfig
 from pipeline_failures import record_compile_failure, write_compile_failure_summary
 from pipeline_files import count_generated_test_classes, delete_generated_test, delete_generated_test_for_source, save_test_code
-from pipeline_generation import generate_initial_test, generate_repair_test, validate_generated_test
-from pipeline_metrics import LibraryRuntimeMetrics, append_library_coverage, append_library_runtime_metrics
+from pipeline_generation import generate_initial_test, generate_repair_test, validate_test
+from pipeline_metrics import (
+    LibraryRuntimeMetrics,
+    append_library_coverage,
+    append_library_runtime_metrics,
+    append_zero_library_coverage,
+)
 from preprocess import check_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult
 
@@ -62,12 +67,12 @@ def run_pipeline(
 
     print_pipeline_target(config, target_java_file, package_name, class_name, output_test_file)
 
-    test_code = generate_initial_test(config, source_code, package_name, class_name, metrics)
+    test_code = generate_initial_test(source_code, package_name, class_name, metrics)
     save_test_code(output_test_file, test_code, "Initial")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
-        validation_result = validate_generated_test(config, test_code, test_class)
+        validation_result = validate_test(test_code, test_class)
 
         if validation_result.passed:
             print(f"SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
@@ -88,7 +93,6 @@ def run_pipeline(
         print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
 
         test_code = generate_repair_test(
-            config,
             test_code,
             validation_result,
             source_code,
@@ -117,7 +121,8 @@ def run_library_pipeline(config: PipelineConfig) -> None:
 
     generated_test_classes = count_generated_test_classes(config, testable_sources)
     if generated_test_classes == 0:
-        print("\nSkipping JaCoCo coverage because no generated test classes survived.")
+        print("\nNo generated test classes survived. Writing zero coverage row.")
+        append_zero_library_coverage(config, len(testable_sources))
         finish_library_run(config, len(testable_sources), metrics, pipeline_started_at)
         return
 
@@ -174,7 +179,8 @@ def handle_final_validation_failure(
     print(f"Validation failed for {test_class}: {message}")
 
     if stage in {"compile", "structure"}:
-        record_compile_failure(config, source, test_class, ValidationResult(False, stage, message))
+        if config.record_failures:
+            record_compile_failure(config, source, test_class, ValidationResult(False, stage, message))
         delete_generated_test(output_test_file, f"{stage} validation failed")
     else:
         print(f"Keeping generated test file with assertion/runtime errors: {output_test_file}")
@@ -197,6 +203,7 @@ def finish_library_run(
     metrics: LibraryRuntimeMetrics,
     pipeline_started_at: float,
 ) -> None:
-    write_compile_failure_summary()
+    if config.record_failures:
+        write_compile_failure_summary()
     metrics.total_pipeline_runtime_seconds = time.monotonic() - pipeline_started_at
     append_library_runtime_metrics(config, total_sources, metrics)
