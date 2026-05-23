@@ -41,11 +41,11 @@ def load_coverage_csv(path: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    root_dir = Path(__file__).resolve().parents[1]
+    root_dir = Path(__file__).resolve().parents[2]
 
     # Load CSV files
     llm = load_coverage_csv(root_dir / "results" / "coverage" /"llm_coverage_final.csv")
-    evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_results.csv")
+    evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_original.csv")
 
     # Find libraries that exist in both CSV files.
     common_libraries = llm[KEY_COLUMNS].drop_duplicates().merge(
@@ -64,7 +64,7 @@ def main() -> None:
     # Generate median summary table.
     summary = df.groupby("source")[COVERAGE_COLUMNS].median().round(2)
 
-    output_dir = root_dir / "coverage"
+    output_dir = root_dir / "results" / "coverage"
     output_dir.mkdir(exist_ok=True)
     summary.to_csv(output_dir / "coverage_summary_table.csv")
 
@@ -125,16 +125,17 @@ def main() -> None:
     plt.ylabel("Coverage (%)", fontsize=14)
     plt.ylim(0, 110)
     plt.title(
-        f"Median Coverage: LLM vs EvoSuite ({len(common_libraries)} matched libraries)",
+        f"Median Coverage: LLM vs EvoSuite tests ({len(common_libraries)} libraries)",
         fontsize=15,
     )
     plt.tight_layout()
 
-    plt.savefig(output_dir / "coverage_bar_chart.pdf")
+    # plt.savefig(output_dir / "coverage_bar_chart.pdf")
+    plt.savefig(output_dir / "coverage_bar_chart.png", dpi=300)
     plt.close()
 
     print(f"\nMatched {len(common_libraries)} of {len(llm)} LLM row(s).")
-    print(f"Saved plot to {output_dir / 'coverage_bar_chart.pdf'}")
+    print(f"Saved plot to {output_dir / 'coverage_bar_chart.png'}")
     print(f"Saved summary to {output_dir / 'coverage_summary_table.csv'}")
 
 

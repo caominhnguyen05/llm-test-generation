@@ -1,0 +1,2 @@
+group_id,artifact_id,version,total_classes_under_test,total_llm_calls,initial_generation_calls,repair_calls,total_llm_generation_time_seconds,average_llm_generation_time_per_class_seconds,total_pipeline_runtime_seconds,average_pipeline_runtime_per_class_seconds,total_prompt_tokens,total_output_tokens,number_of_repair_attempts
+org.apache.commons,commons-csv,1.8,9,14,9,5,636.249,70.6943,1069.093,118.7881,94421,53444,1

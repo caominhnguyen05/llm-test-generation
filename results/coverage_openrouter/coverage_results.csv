@@ -1,0 +1,2 @@
+group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,testable_source_files,generated_test_classes,compilation_success_rate,tests_total,tests_passed,tests_failed_assertions,tests_runtime_errors,runtime_success_rate,failed_assertion_rate,runtime_error_rate
+org.apache.commons,commons-csv,1.8,LLM,76.67,61.09,74.95,59.13,86.15,100.00,9,8,0.8889,237,218,4,15,0.9198,0.0169,0.0633
