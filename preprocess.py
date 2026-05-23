@@ -10,7 +10,7 @@ def remove_license_comment(source_code: str) -> str:
 
 
 def read_source_file(path: Path) -> str:
-    with open(path, "r", encoding="utf-8") as file:
+    with open(path, "r") as file:
         return remove_license_comment(file.read())
 
 
