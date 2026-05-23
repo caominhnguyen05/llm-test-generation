@@ -1,12 +1,19 @@
+from openai import OpenAI
 from ollama import chat
 import time
 from dataclasses import dataclass
-from llm.config import SYSTEM_PROMPT, LLM_TIMEOUT_SECONDS
+
+from llm.config import (
+    SYSTEM_PROMPT,
+    LLM_TIMEOUT_SECONDS,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_MODEL,
+)
 
 
 class LLMGenerationTimeoutError(TimeoutError):
     pass
-
 
 @dataclass(frozen=True)
 class LLMCallMetrics:
@@ -14,8 +21,63 @@ class LLMCallMetrics:
     prompt_tokens: int = 0
     output_tokens: int = 0
 
+client = OpenAI(
+    base_url=OPENROUTER_BASE_URL,
+    api_key=OPENROUTER_API_KEY,
+)
 
-def generate_llm_response(prompt: str, model: str, return_metrics: bool = False) -> str | tuple[str, LLMCallMetrics]:
+
+def generate_llm_response_openrouter(
+    prompt: str,
+) -> tuple[str, LLMCallMetrics]:
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY environment variable is not set.")
+
+    started_at = time.monotonic()
+    llm_output = ""
+    prompt_tokens = 0
+    output_tokens = 0
+
+    response = client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0,
+        seed=42,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    for chunk in response:
+        if time.monotonic() - started_at > LLM_TIMEOUT_SECONDS:
+            raise LLMGenerationTimeoutError(
+                f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds"
+            )
+
+        if hasattr(chunk, "usage") and chunk.usage is not None:
+            prompt_tokens = chunk.usage.prompt_tokens or 0
+            output_tokens = chunk.usage.completion_tokens or 0
+
+        if chunk.choices and len(chunk.choices) > 0:
+            token = chunk.choices[0].delta.content or ""
+            print(token, end="", flush=True)
+            llm_output += token
+
+    duration_ns = int((time.monotonic() - started_at) * 1_000_000_000)
+
+    print("\n\nGeneration complete.\n")
+
+    metrics = LLMCallMetrics(
+        total_duration_ns=duration_ns,
+        prompt_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+    )
+    return llm_output, metrics
+
+
+def generate_llm_response_ollama(prompt: str, model: str) -> tuple[str, LLMCallMetrics]:
     stream = chat(
         model=model,
         messages=[
@@ -28,6 +90,7 @@ def generate_llm_response(prompt: str, model: str, return_metrics: bool = False)
             "seed": 42,
         }
     )
+
     llm_output = ""
     metrics = LLMCallMetrics()
     started_at = time.monotonic()
@@ -44,9 +107,7 @@ def generate_llm_response(prompt: str, model: str, return_metrics: bool = False)
         print(token, end="", flush=True)
         llm_output += token
     print("\n\nGeneration complete.\n")
-    if return_metrics:
-        return llm_output, metrics
-    return llm_output
+    return llm_output, metrics
 
 
 def get_generation_prompt(source_code: str, package_name: str, class_name: str) -> str:
@@ -93,8 +154,7 @@ def get_repair_prompt(
 
     Repair goal:
     - Fix the test so it compiles and passes.
-    - The source under test is assumed correct.
-    - If an assertion fails, change the test expectation to match actual behavior shown in the error output.
+    - If an assertion fails, change the test expectation to match actual results shown in the error output.
     - If a test expects an exception that is not thrown, remove or replace that invalid expectation.
     - Do not invent APIs or dependencies.
     - Do not shrink the test class just to make it pass.
