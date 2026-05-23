@@ -13,6 +13,7 @@ import streamlit as st
 
 from pipeline_config import (
     DEFAULT_LIBRARIES_ROOT,
+    COVERAGE_CSV,
     MAX_REPAIR_ATTEMPTS,
     coordinate_to_path,
 )
@@ -289,25 +290,16 @@ def pipeline_tab(libraries: list[str]) -> None:
         stream_command(command, "Generate and Validate Tests")
 
 
-def coverage_tab(libraries: list[str]) -> None:
+def coverage_tab() -> None:
     st.subheader("Coverage")
-    scope = st.segmented_control("Scope", ["All libraries", "One library"], default="All libraries")
-    output_name = st.text_input("CSV output", value="csv_data/coverage_results.csv")
+    output_name = st.text_input("CSV output", value=str(COVERAGE_CSV.relative_to(ROOT)))
+    output_path = ROOT / output_name
 
-    root_arg = "libraries_initial"
-    if scope == "One library" and libraries:
-        library = st.selectbox("Library", libraries, key="coverage_library")
-        library_path = coordinate_to_path(Path("libraries_initial"), library)
-        if library_path is not None:
-            root_arg = str(library_path)
-
-    command = [sys.executable, "-u", "coverage/run_coverage.py", root_arg, "--output", output_name]
-    if st.button("Run Coverage", use_container_width=True):
-        stream_command(command, "Run JaCoCo Coverage")
-        output_path = ROOT / output_name
-        if output_path.exists():
-            with open(output_path, newline="", encoding="utf-8") as file:
-                st.dataframe(list(csv.DictReader(file)), use_container_width=True)
+    if output_path.exists():
+        with open(output_path, newline="", encoding="utf-8") as file:
+            st.dataframe(list(csv.DictReader(file)), use_container_width=True)
+    else:
+        st.info("Coverage results are written when the pipeline finishes a library.")
 
 
 def builder_tab() -> None:
@@ -336,7 +328,7 @@ def main() -> None:
     with pipeline:
         pipeline_tab(libraries)
     with coverage:
-        coverage_tab(libraries)
+        coverage_tab()
     with builder:
         builder_tab()
 
