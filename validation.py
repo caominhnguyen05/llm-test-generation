@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from maven_helpers import run_maven_test_compile, run_maven_test_runtime
+from maven_helpers import compile_test, execute_test
 from pipeline_config import PipelineConfig
 
 
@@ -10,7 +10,7 @@ class ValidationResult:
     message: str = ""
 
 
-def test_class_structure_check(test_code: str, class_name: str) -> list[str]:
+def check_test_class_structure(test_code: str, class_name: str) -> list[str]:
     issues = []
     if f"public class {class_name}Test" not in test_code:
         issues.append(f"missing public class {class_name}Test declaration")
@@ -20,21 +20,21 @@ def test_class_structure_check(test_code: str, class_name: str) -> list[str]:
 
 
 def validate_structure(test_code: str, class_name: str) -> ValidationResult:
-    issues = test_class_structure_check(test_code, class_name)
+    issues = check_test_class_structure(test_code, class_name)
     if issues:
         return ValidationResult(False, "structure", ", ".join(issues))
     return ValidationResult(True, "structure")
 
 
 def validate_compile(config: PipelineConfig, test_class: str) -> ValidationResult:
-    success, output = run_maven_test_compile(config.library_path, test_class)
+    success, output = compile_test(config.library_path, test_class)
     if not success:
         return ValidationResult(False, "compile", output)
     return ValidationResult(True, "compile")
 
 
 def validate_runtime(config: PipelineConfig, test_class: str) -> ValidationResult:
-    success, output = run_maven_test_runtime(config.library_path, test_class)
+    success, output = execute_test(config.library_path, test_class)
     if not success:
         return ValidationResult(False, "runtime", output)
     return ValidationResult(True, "runtime", output)

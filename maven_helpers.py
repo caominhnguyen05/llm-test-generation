@@ -33,7 +33,7 @@ def only_test_class_visible(library_path: Path, test_class: str):
                     move(str(hidden_file), str(original_file))
 
 
-def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, str]:
+def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
     print(f"\nCompiling test class {test_class}...")
 
     command = [
@@ -62,7 +62,7 @@ def run_maven_test_compile(library_path: Path, test_class: str) -> tuple[bool, s
     return False, error_output[-ERROR_CONTEXT_CHARS:]
 
 
-def run_maven_test_runtime(library_path: Path, test_class: str) -> tuple[bool, str]:
+def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
     print(f"\nRunning Maven tests for {test_class}...")
 
     command = [
