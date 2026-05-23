@@ -1,4 +1,3 @@
-import argparse
 import csv
 import re
 import subprocess
@@ -28,21 +27,7 @@ class TestCounts:
 @dataclass(frozen=True)
 class PruneResult:
     test_counts: TestCounts
-    failing_tests: dict[str, set[str]]
     removed_methods: int = 0
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run JaCoCo coverage for Maven libraries and output CSV.")
-    parser.add_argument("root", nargs="?", default="libraries_small", help="Folder containing Maven library folders.")
-    parser.add_argument("--output", "-o", help="Optional CSV output file. Defaults to stdout.")
-    return parser.parse_args()
-
-
-def find_maven_projects(root: Path) -> list[Path]:
-    if (root / "pom.xml").exists():
-        return [root]
-    return sorted(path for path in root.iterdir() if path.is_dir() and (path / "pom.xml").exists())
 
 
 def read_maven_project(project_path: Path) -> MavenProject:
@@ -62,7 +47,7 @@ def read_maven_project(project_path: Path) -> MavenProject:
     )
 
 
-def run_jacoco(project_path: Path, timeout: int) -> tuple[bool, str]:
+def run_jacoco(project_path: Path, timeout: int) -> bool:
     print(f"Running JaCoCo for {project_path.name}...", file=sys.stderr)
     command = [
         "mvn.cmd",
@@ -73,6 +58,7 @@ def run_jacoco(project_path: Path, timeout: int) -> tuple[bool, str]:
         "jacoco:report",
         "-Drat.skip=true",
         "-Danimal.sniffer.skip=true",
+        "-Dmaven.test.failure.ignore=true",
     ]
 
     result = subprocess.run(
@@ -85,10 +71,10 @@ def run_jacoco(project_path: Path, timeout: int) -> tuple[bool, str]:
 
     output = result.stdout + "\n" + result.stderr
     if result.returncode == 0:
-        return True, output
+        return True
 
     print(f"JaCoCo failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
-    return False, output
+    return False
 
 
 def run_tests_and_prune_failures(project_path: Path, timeout: int) -> PruneResult:
@@ -119,24 +105,22 @@ def run_tests_and_prune_failures(project_path: Path, timeout: int) -> PruneResul
     removed_methods = remove_failed_test_methods(project_path, failing_tests)
     if removed_methods:
         print(f"Removed {removed_methods} failing/erroring test method(s) from {project_path.name}.", file=sys.stderr)
-    return PruneResult(test_counts, failing_tests, removed_methods)
+    return PruneResult(test_counts, removed_methods)
 
 
-def run_pruned_jacoco(project_path: Path, timeout: int) -> tuple[bool, str, PruneResult]:
+def run_pruned_jacoco(project_path: Path, timeout: int) -> tuple[bool, PruneResult]:
     """Remove failing/erroring tests before running JaCoCo, preserving original runtime counts."""
     prune_result = run_tests_and_prune_failures(project_path, timeout)
-    success, output = run_jacoco(project_path, timeout)
-    return success, output, prune_result
+    success = run_jacoco(project_path, timeout)
+    return success, prune_result
 
 
 def read_coverage(
     project: MavenProject,
-    maven_output: str,
     testable_source_files: int | None = None,
     generated_test_classes: int | None = None,
-    test_counts: TestCounts | None = None,
+    test_counts: TestCounts = TestCounts(),
 ) -> dict[str, str]:
-    test_counts = test_counts or _parse_test_counts(maven_output)
     row = {
         "group_id": project.group_id,
         "artifact_id": project.artifact_id,
@@ -226,19 +210,6 @@ def remove_failed_test_methods(project_path: Path, failing_tests: dict[str, set[
     return removed_methods
 
 
-def write_rows(rows: list[dict[str, str]], output_path: str | None) -> None:
-    if output_path:
-        with open(output_path, "w", encoding="utf-8", newline="") as file:
-            writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
-            writer.writeheader()
-            writer.writerows(rows)
-        return
-
-    writer = csv.DictWriter(sys.stdout, fieldnames=FIELDNAMES)
-    writer.writeheader()
-    writer.writerows(rows)
-
-
 def append_row(row: dict[str, str], output_path: Path) -> None:
     """Append one coverage row without modifying existing CSV rows."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,39 +237,6 @@ def _coverage_field_name(counter_type: str) -> str:
 
 def _project_fieldnames(row: dict[str, str]) -> dict[str, str]:
     return {fieldname: row.get(fieldname, "") for fieldname in FIELDNAMES}
-
-
-def _parse_test_counts(maven_output: str) -> TestCounts:
-    matches = list(
-        re.finditer(
-            r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)",
-            maven_output,
-        )
-    )
-    if not matches:
-        return TestCounts()
-
-    tests_total = 0
-    tests_failed_assertions = 0
-    tests_runtime_errors = 0
-    tests_skipped = 0
-    for match in matches:
-        tests_run = int(match.group(1))
-        failures = int(match.group(2))
-        errors = int(match.group(3))
-        skipped = int(match.group(4))
-        tests_total += tests_run
-        tests_failed_assertions += failures
-        tests_runtime_errors += errors
-        tests_skipped += skipped
-
-    tests_passed = tests_total - tests_failed_assertions - tests_runtime_errors - tests_skipped
-    return TestCounts(
-        total=tests_total,
-        passed=tests_passed,
-        failed_assertions=tests_failed_assertions,
-        runtime_errors=tests_runtime_errors,
-    )
 
 
 def _java_method_name(testcase_name: str) -> str:
@@ -455,22 +393,3 @@ def _find_text(root: ET.Element, path: str, namespace: str) -> str | None:
     if element is None or element.text is None:
         return None
     return element.text.strip()
-
-
-def main() -> None:
-    args = parse_args()
-    root = Path(args.root)
-    if not root.exists():
-        raise SystemExit(f"Root folder not found: {root}")
-
-    rows = []
-    for project_path in find_maven_projects(root):
-        project = read_maven_project(project_path)
-        _, maven_output, prune_result = run_pruned_jacoco(project.path, 300)
-        rows.append(read_coverage(project, maven_output, test_counts=prune_result.test_counts))
-
-    write_rows(rows, args.output)
-
-
-if __name__ == "__main__":
-    main()
