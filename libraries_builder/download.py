@@ -7,11 +7,12 @@ import shutil
 import xml.etree.ElementTree as ET
 
 
-CSV_FILE = "csv_data/evosuite_results_one.csv"
+CSV_FILE = "csv_data/evosuite_results.csv"
 OUTPUT_DIR = Path("libraries_sample")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 POM_NS = "http://maven.apache.org/POM/4.0.0"
-JAVA_VERSION = "8"
+MIN_JAVA_VERSION = 8
+DEFAULT_JAVA_VERSION = "8"
 ET.register_namespace("", POM_NS)
 
 # =========================
@@ -135,24 +136,78 @@ def remove_children(parent, name):
     for elem in children(parent, name):
         parent.remove(elem)
 
+def normalize_java_version(value: str) -> str:
+    value = value.strip()
+
+    if value.startswith("${") and value.endswith("}"):
+        return DEFAULT_JAVA_VERSION
+
+    if value.startswith("1."):
+        value = value.split(".", 1)[1]
+
+    try:
+        version_num = int(value)
+        if version_num < MIN_JAVA_VERSION:
+            return DEFAULT_JAVA_VERSION
+        return str(version_num)
+    except ValueError:
+        return DEFAULT_JAVA_VERSION
+
+def child_text(parent, name):
+    elem = child(parent, name)
+    if elem is None or elem.text is None:
+        return None
+    return elem.text.strip()
+
+def detect_java_version(root):
+    properties = child(root, "properties")
+    if properties is not None:
+        for name in (
+            "maven.compiler.release",
+            "maven.compiler.source",
+            "maven.compiler.target",
+            "maven.compile.source",
+            "maven.compile.target",
+        ):
+            value = child_text(properties, name)
+            if value:
+                return value
+
+    for plugin in root.iter(pom_tag("plugin")):
+        if not plugin_matches(plugin, "org.apache.maven.plugins", "maven-compiler-plugin"):
+            continue
+
+        configuration = child(plugin, "configuration")
+        if configuration is None:
+            continue
+
+        for name in ("release", "source", "target"):
+            value = child_text(configuration, name)
+            if value:
+                return value
+
+    return None
+
 def set_plugin_version(plugin, version):
     set_text_child(plugin, "version", version)
 
-def configure_compiler_plugin(plugins):
+def configure_compiler_plugin(plugins, java_version):
     plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-compiler-plugin")
     set_plugin_version(plugin, "3.11.0")
     configuration = get_or_create_child(plugin, "configuration")
-    set_text_child(configuration, "source", JAVA_VERSION)
-    set_text_child(configuration, "target", JAVA_VERSION)
+    remove_children(configuration, "source")
+    remove_children(configuration, "target")
+    set_text_child(configuration, "release", java_version)
     # set_text_child(configuration, "encoding", "UTF-8")
 
-def configure_existing_compiler_plugins(root):
+def configure_existing_compiler_plugins(root, java_version):
     for plugin in root.iter(pom_tag("plugin")):
         if plugin_matches(plugin, "org.apache.maven.plugins", "maven-compiler-plugin"):
             set_plugin_version(plugin, "3.11.0")
             configuration = get_or_create_child(plugin, "configuration")
-            set_text_child(configuration, "source", JAVA_VERSION)
-            set_text_child(configuration, "target", JAVA_VERSION)
+            remove_children(configuration, "source")
+            remove_children(configuration, "target")
+            set_text_child(configuration, "release", java_version)
             # set_text_child(configuration, "encoding", "UTF-8")
 
 def configure_surefire_plugin(plugins):
@@ -197,15 +252,19 @@ def configure_jacoco_plugin(plugins):
 
 
 def normalize_generated_test_pom(root):
+    detected_java = detect_java_version(root)
+    java_version = normalize_java_version(detected_java) if detected_java else DEFAULT_JAVA_VERSION
+
     properties = get_or_create_child(root, "properties")
     # set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
     set_text_child(properties, "jacoco.argLine", "")
 
     # Prevent old libraries from using source/target values unsupported by modern JDKs.
-    set_text_child(properties, "maven.compiler.source", JAVA_VERSION)
-    set_text_child(properties, "maven.compiler.target", JAVA_VERSION)
-    set_text_child(properties, "maven.compile.source", JAVA_VERSION)
-    set_text_child(properties, "maven.compile.target", JAVA_VERSION)
+    set_text_child(properties, "maven.compiler.release", java_version)
+    remove_children(properties, "maven.compiler.source")
+    remove_children(properties, "maven.compiler.target")
+    remove_children(properties, "maven.compile.source")
+    remove_children(properties, "maven.compile.target")
 
     dependencies = get_or_create_child(root, "dependencies")
     add_or_update_dependency(dependencies, "junit", "junit", "4.13.2")
@@ -216,10 +275,10 @@ def normalize_generated_test_pom(root):
     set_text_child(build, "testSourceDirectory", "src/test/java")
 
     plugins = get_or_create_child(build, "plugins")
-    configure_compiler_plugin(plugins)
+    configure_compiler_plugin(plugins, java_version)
     configure_surefire_plugin(plugins)
     configure_jacoco_plugin(plugins)
-    configure_existing_compiler_plugins(root)
+    configure_existing_compiler_plugins(root, java_version)
 
 def add_jacoco_plugin(plugins):
     configure_jacoco_plugin(plugins)
@@ -378,13 +437,20 @@ def main():
                 delete_library(lib_dir, "source jar extraction failed")
                 continue
 
+            java_files = list(extract_dir.rglob("*.java"))
+            if not java_files:
+                delete_library(lib_dir, "source jar contains no Java files")
+                continue
+
             delete_downloaded_jar(jar_path)
 
             create_maven_project(lib_dir, group_id, artifact_id, version)
 
             success, output = compile_library(lib_dir)
+            count = 0
             if success:
                 print(f"Compile success: {group_id}:{artifact_id}:{version}")
+                count += 1
             else:
                 print(f"Compile failed: {group_id}:{artifact_id}:{version}")
                 print(output.strip()[-4000:])
@@ -395,12 +461,13 @@ def main():
                 success, output = compile_library(lib_dir)
                 if success:
                     print(f"Compile success with minimal pom.xml: {group_id}:{artifact_id}:{version}")
+                    count += 1
                 else:
                     print(f"Compile failed with minimal pom.xml: {group_id}:{artifact_id}:{version}")
                     print(output.strip()[-4000:])
-                    # delete_library(lib_dir, "library does not compile")
+                    delete_library(lib_dir, "library does not compile")
 
-    print("\nAll done!")
+    print(f"\nAll done! Successfully compiled {count} libraries.")
 
 if __name__ == "__main__":
     main()
