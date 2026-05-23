@@ -1,5 +1,5 @@
 from pipeline_config import PipelineConfig
-from llm.config import OLLAMA_MODEL
+from llm.config import OLLAMA_MODEL, LLM_BACKEND
 from llm.main import (
     LLMCallMetrics,
     generate_llm_response_ollama,
@@ -12,17 +12,16 @@ from postprocess import normalize_test_code
 from validation import ValidationResult, validate_compile, validate_runtime, validate_structure
 
 
-def generate_llm_response(config: PipelineConfig, prompt: str) -> tuple[str, LLMCallMetrics]:
+def generate_llm_response(prompt: str) -> tuple[str, LLMCallMetrics]:
     """Route LLM calls through the backend selected in the pipeline config."""
-    if config.llm_backend == "openrouter":
+    if LLM_BACKEND == "openrouter":
         return generate_llm_response_openrouter(prompt)
-    if config.llm_backend == "ollama":
+    if LLM_BACKEND == "ollama":
         return generate_llm_response_ollama(prompt, model=OLLAMA_MODEL)
-    raise ValueError(f"Unsupported LLM backend: {config.llm_backend!r}")
+    raise ValueError(f"Unsupported LLM backend: {LLM_BACKEND!r}")
 
 
 def generate_initial_test(
-    config: PipelineConfig,
     source_code: str,
     package_name: str,
     class_name: str,
@@ -31,7 +30,6 @@ def generate_initial_test(
     """Ask the LLM to generate the first version of the JUnit test class."""
     print(f"\n[Attempt 0] Asking LLM to generate test class for {class_name} in {package_name}...")
     llm_output, call_metrics = generate_llm_response(
-        config,
         get_generation_prompt(source_code, package_name, class_name),
     )
     if metrics is not None:
@@ -40,7 +38,6 @@ def generate_initial_test(
 
 
 def generate_repair_test(
-    config: PipelineConfig,
     test_code: str,
     validation_result: ValidationResult,
     source_code: str,
@@ -51,7 +48,6 @@ def generate_repair_test(
     """Ask the LLM to repair a generated test after validation fails."""
     print(f"Asking LLM to repair the test for {class_name} in {package_name}...")
     llm_output, call_metrics = generate_llm_response(
-        config,
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
     )
     
