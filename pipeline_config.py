@@ -3,32 +3,29 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-OLLAMA_MODEL = "qwen2.5-coder:7b"
 DEFAULT_LIBRARIES_ROOT = Path("libraries_no_repair")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 
 MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
-ERROR_CONTEXT_CHARS = 5000
+ERROR_CONTEXT_CHARS = 6000
 
-LLM_COVERAGE_CSV = REPO_ROOT / "results/coverage/coverage_no_repair.csv"
-LLM_RUNTIME_CSV = REPO_ROOT / "results/cost/runtime_no_repair.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "results/llm_compile_failures.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/llm_compile_failure_summary.csv"
+COVERAGE_CSV = REPO_ROOT / "results/coverage/coverage_repair_1.csv"
+COST_CSV = REPO_ROOT / "results/cost/runtime_repair_1.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/llm_compile_failures_1.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/llm_compile_failure_summary_1.csv"
 
 
 @dataclass(frozen=True)
 class PipelineConfig:
     library: str
     attempts: int
-    libraries_root: Path
     libraries_csv: Path | None = None
     record_failures: bool = True
-    model: str = OLLAMA_MODEL
 
     @property
     def library_path(self) -> Path:
-        return coordinate_to_path(self.libraries_root, self.library)
+        return coordinate_to_path(DEFAULT_LIBRARIES_ROOT, self.library)
 
     @property
     def source_root(self) -> Path:
@@ -51,13 +48,6 @@ def parse_args() -> PipelineConfig:
             "Maven coordinates in the form groupId:artifactId:version. "
             "Example: commons-cli:commons-cli:1.2"
         ),
-    )
-
-    parser.add_argument(
-        "--libraries-root",
-        type=Path,
-        default=DEFAULT_LIBRARIES_ROOT,
-        help="Root folder containing downloaded libraries.",
     )
 
     parser.add_argument(
@@ -86,7 +76,6 @@ def parse_args() -> PipelineConfig:
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
-        libraries_root=args.libraries_root,
         libraries_csv=args.libraries_csv,
         record_failures=args.record_failures,
     )
