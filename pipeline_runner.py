@@ -6,7 +6,6 @@ from pipeline_failures import record_compile_failure, write_compile_failure_summ
 from pipeline_files import (
     count_generated_test_classes,
     delete_generated_test,
-    delete_generated_test_for_source,
     save_test_code,
 )
 from pipeline_generation import generate_initial_test, generate_repair_test, validate_test
@@ -145,7 +144,6 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
             print(exc)
-            delete_generated_test_for_source(config, source, f"pipeline exception: {exc}")
 
     if failures:
         print(f"\nCompleted with {len(failures)} failed source file(s):")

@@ -31,9 +31,6 @@ class LibraryRuntimeMetrics:
     total_output_tokens: int = 0
     total_pipeline_runtime_seconds: float = 0.0
 
-    def record_initial_call(self, metrics: LLMCallMetrics) -> None:
-        self.record_call(metrics)
-
     def record_repair_call(self, metrics: LLMCallMetrics) -> None:
         self.repair_calls += 1
         self.record_call(metrics)
@@ -98,9 +95,6 @@ def append_library_runtime_metrics(
     total_classes_under_test: int,
     metrics: LibraryRuntimeMetrics,
 ) -> None:
-    """Append one per-library runtime and LLM usage row."""
-    total_llm_seconds = metrics.total_llm_generation_time_ns / 1_000_000_000
-    total_pipeline_seconds = metrics.total_pipeline_runtime_seconds
     row = {
         "group_id": config.group_id,
         "artifact_id": config.artifact_id,
@@ -108,12 +102,13 @@ def append_library_runtime_metrics(
         "total_classes_under_test": str(total_classes_under_test),
         "total_llm_calls": str(metrics.total_llm_calls),
         "repair_calls": str(metrics.repair_calls),
-        "total_llm_generation_time_seconds": f"{total_llm_seconds:.4f}",
-        "total_pipeline_runtime_seconds": f"{total_pipeline_seconds:.4f}",
+        "total_llm_generation_time_seconds": f"{metrics.total_llm_generation_time_ns / 1_000_000_000:.4f}",
+        "total_pipeline_runtime_seconds": f"{metrics.total_pipeline_runtime_seconds:.4f}",
         "total_prompt_tokens": str(metrics.total_prompt_tokens),
         "total_output_tokens": str(metrics.total_output_tokens),
         "number_of_repair_attempts": str(config.attempts),
     }
+
     append_csv_row(COST_CSV, COST_FIELDNAMES, row)
     print(f"Runtime metrics row written to {COST_CSV}")
 

@@ -1,17 +1,13 @@
 import re
-from pathlib import Path
 
 JUNIT4_IMPORTS = {
     "import org.junit.Test;",
     "import static org.junit.Assert.*;",
 }
 
-JUNIT_SYMBOL_IMPORTS = {
+SYMBOL_IMPORTS = {
     "@Before": "import org.junit.Before;",
     "@After": "import org.junit.After;",
-}
-
-JAVA_SYMBOL_IMPORTS = {
     "Arrays.": "import java.util.Arrays;",
     "Collections.": "import java.util.Collections;",
     "Collection<": "import java.util.Collection;",
@@ -25,17 +21,11 @@ JAVA_SYMBOL_IMPORTS = {
     "StringWriter": "import java.io.StringWriter;",
 }
 
-def write_file(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as file:
-        file.write(content.rstrip() + "\n")
-
-
 def contains_class_declaration(source_code: str, class_name: str) -> bool:
     return bool(re.search(rf"\bclass\s+{re.escape(class_name)}\b", source_code))
 
 
-def extract_java_code(llm_output: str, expected_class: str | None = None) -> str:
+def extract_java_code(llm_output: str, expected_class: str) -> str:
     """Extract the generated Java test class from an LLM response."""
     java_blocks = [
         match.group(1).strip()
@@ -46,15 +36,14 @@ def extract_java_code(llm_output: str, expected_class: str | None = None) -> str
         for match in re.finditer(r"```\s*(.*?)```", llm_output, flags=re.DOTALL)
     ]
 
-    if expected_class:
-        for block in java_blocks:
-            if contains_class_declaration(block, expected_class):
-                return block
-        for block in generic_blocks:
-            if contains_class_declaration(block, expected_class):
-                return block
-        if contains_class_declaration(llm_output, expected_class):
-            return llm_output.strip()
+    for block in java_blocks:
+        if contains_class_declaration(block, expected_class):
+            return block
+    for block in generic_blocks:
+        if contains_class_declaration(block, expected_class):
+            return block
+    if contains_class_declaration(llm_output, expected_class):
+        return llm_output.strip()
 
     if java_blocks:
         return java_blocks[0]
@@ -116,11 +105,7 @@ def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
     """Infer imports commonly needed by generated JUnit 4 tests."""
     imports = set(JUNIT4_IMPORTS)
 
-    for symbol, import_line in JUNIT_SYMBOL_IMPORTS.items():
-        if symbol in test_code:
-            imports.add(import_line)
-
-    for symbol, import_line in JAVA_SYMBOL_IMPORTS.items():
+    for symbol, import_line in SYMBOL_IMPORTS.items():
         if symbol in test_code:
             imports.add(import_line)
 
