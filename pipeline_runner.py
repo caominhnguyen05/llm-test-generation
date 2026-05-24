@@ -1,10 +1,14 @@
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from pipeline_config import PipelineConfig
 from pipeline_failures import record_compile_failure, write_compile_failure_summary
-from pipeline_files import count_generated_test_classes, delete_generated_test, delete_generated_test_for_source, save_test_code
+from pipeline_files import (
+    count_generated_test_classes,
+    delete_generated_test,
+    delete_generated_test_for_source,
+    save_test_code,
+)
 from pipeline_generation import generate_initial_test, generate_repair_test, validate_test
 from pipeline_metrics import (
     LibraryRuntimeMetrics,
@@ -16,180 +20,150 @@ from preprocess import check_testability, extract_package_and_class, read_source
 from validation import ValidationResult
 
 
-@dataclass(frozen=True)
-class PipelineResult:
-    succeeded: bool
-    message: str = ""
-
-    def __bool__(self) -> bool:
-        return self.succeeded
-
-
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
-    """Return Java source files in a library that are likely worth testing."""
     if not config.source_folder.exists():
-        print(f"Error: source root not found: {config.source_folder}")
+        print(f"Error: source folder not found: {config.source_folder}")
         return []
 
-    selected_sources: list[Path] = []
-    skipped_sources: list[tuple[Path, str]] = []
+    sources = []
+    skipped = []
+
     for path in sorted(config.source_folder.rglob("*.java")):
         decision = check_testability(path, config.source_folder)
         relative_path = path.relative_to(config.source_folder)
-        if decision.testable:
-            selected_sources.append(relative_path)
-        else:
-            skipped_sources.append((relative_path, decision.reason))
 
-    if skipped_sources:
-        print(f"Preprocessing skipped {len(skipped_sources)} likely non-testable source files:")
-        for source, reason in skipped_sources:
+        if decision.testable:
+            sources.append(relative_path)
+        else:
+            skipped.append((relative_path, decision.reason))
+
+    if skipped:
+        print(f"Preprocessing skipped {len(skipped)} likely non-testable source files:")
+        for source, reason in skipped:
             print(f"- {source}: {reason}")
 
-    return selected_sources
+    return sources
 
 
 def process_one_source(
     config: PipelineConfig,
     source: Path,
     metrics: LibraryRuntimeMetrics,
-) -> PipelineResult:
-    """Generate, save, validate, and repair a test for one Java source file."""
-    target_java_file = config.source_folder / source
-    source_code = read_source_file(target_java_file)
-    package_name, class_name = extract_package_and_class(target_java_file, config.source_folder)
+) -> str | None:
+    source_file = config.source_folder / source
+    source_code = read_source_file(source_file)
+    package_name, class_name = extract_package_and_class(source_file, config.source_folder)
+
     test_class = f"{class_name}Test"
-    output_test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
+    test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
     print(f"  Library: {config.library}")
     print(f"  Class: {class_name}")
 
     test_code = generate_initial_test(source_code, package_name, class_name, metrics)
-    save_test_code(output_test_file, test_code, "Initial")
+    save_test_code(test_file, test_code, "Initial")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
-        validation_result = validate_test(config, test_code, test_class)
+        result = validate_test(config, test_code, test_class)
 
-        if validation_result.passed:
+        if result.passed:
             print(f"SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
-            return PipelineResult(True)
+            return None
 
-        if attempt >= config.attempts:
-            return handle_final_validation_failure(
-                config,
-                source,
-                output_test_file,
-                test_class,
-                validation_result.stage,
-                validation_result.message,
+        if attempt == config.attempts:
+            return handle_validation_failure(
+                config, source, test_file, test_class, result.stage, result.message
             )
 
-        print(f"{validation_result.stage.title()} validation failed for {test_class}.")
-        print(f"Error: {validation_result.message}")
+        print(f"{result.stage.title()} validation failed for {test_class}.")
+        print(f"Error: {result.message}")
         print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
 
         test_code = generate_repair_test(
             test_code,
-            validation_result,
+            result,
             source_code,
             package_name,
             class_name,
             metrics,
         )
-        save_test_code(output_test_file, test_code, "Repaired")
+        save_test_code(test_file, test_code, "Repaired")
 
-    return PipelineResult(False, "validation failed")
+    return "validation failed"
+
+
+def handle_validation_failure(
+    config: PipelineConfig,
+    source: Path,
+    test_file: Path,
+    test_class: str,
+    stage: str,
+    message: str,
+) -> str:
+    print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
+    print(f"Validation failed for {test_class}: {message}")
+
+    if stage in {"compile", "structure"}:
+        if config.record_failures:
+            record_compile_failure(
+                config,
+                source,
+                test_class,
+                ValidationResult(False, stage, message),
+            )
+        delete_generated_test(test_file, f"{stage} validation failed")
+    else:
+        print(f"Keeping generated test file with assertion/runtime errors: {test_file}")
+
+    return f"{stage} validation failed after max repair attempts"
 
 
 def run_library_pipeline(config: PipelineConfig) -> None:
-    """Run the test-generation pipeline for every Java source file in a library."""
     if not config.library_path.exists():
         print(f"Error: library folder not found: {config.library_path}")
         return
-    
-    pipeline_started_at = time.monotonic()
-    metrics = LibraryRuntimeMetrics()
-    testable_sources = find_testable_sources(config)
 
-    if not testable_sources:
+    started_at = time.monotonic()
+    metrics = LibraryRuntimeMetrics()
+    sources = find_testable_sources(config)
+
+    if not sources:
         print(f"No testable Java source files found under {config.source_folder}")
         return
 
-    failures = process_sources(config, testable_sources, metrics)
-    print_library_summary(failures)
-
-    generated_test_classes = count_generated_test_classes(config, testable_sources)
-    if generated_test_classes == 0:
-        print("\nNo generated test classes survived. Writing zero coverage row.")
-        append_zero_coverage_row(config, len(testable_sources))
-        finish_library_run(config, len(testable_sources), metrics, pipeline_started_at)
-        return
-
-    append_library_coverage(config, len(testable_sources), generated_test_classes)
-    finish_library_run(config, len(testable_sources), metrics, pipeline_started_at)
-
-
-def process_sources(
-    config: PipelineConfig,
-    sources: list[Path],
-    metrics: LibraryRuntimeMetrics,
-) -> list[tuple[Path, str]]:
-    failures: list[tuple[Path, str]] = []
+    failures = []
     print(f"Found {len(sources)} testable Java source files in {config.library}.")
 
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
-            result = process_one_source(config, source, metrics)
-            if not result.succeeded:
-                failures.append((source, result.message))
+            error = process_one_source(config, source, metrics)
+            if error:
+                failures.append((source, error))
         except Exception as exc:
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
             print(exc)
             delete_generated_test_for_source(config, source, f"pipeline exception: {exc}")
 
-    return failures
-
-
-def handle_final_validation_failure(
-    config: PipelineConfig,
-    source: Path,
-    output_test_file: Path,
-    test_class: str,
-    stage: str,
-    message: str,
-) -> PipelineResult:
-    print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
-    print(f"Validation failed for {test_class}: {message}")
-
-    if stage in {"compile", "structure"}:
-        if config.record_failures:
-            record_compile_failure(config, source, test_class, ValidationResult(False, stage, message))
-        delete_generated_test(output_test_file, f"{stage} validation failed")
-    else:
-        print(f"Keeping generated test file with assertion/runtime errors: {output_test_file}")
-
-    return PipelineResult(False, f"{stage} validation failed after max repair attempts")
-
-
-def print_library_summary(failures: list[tuple[Path, str]]) -> None:
     if failures:
         print(f"\nCompleted with {len(failures)} failed source file(s):")
-        for source, message in failures:
-            print(f"- {source}: {message}")
+        for source, error in failures:
+            print(f"- {source}: {error}")
     else:
         print("\nCompleted successfully with no failed source files.")
 
+    generated_tests = count_generated_test_classes(config, sources)
 
-def finish_library_run(
-    config: PipelineConfig,
-    total_sources: int,
-    metrics: LibraryRuntimeMetrics,
-    pipeline_started_at: float,
-) -> None:
+    if generated_tests == 0:
+        print("\nNo generated test classes survived. Writing zero coverage row.")
+        append_zero_coverage_row(config, len(sources))
+    else:
+        append_library_coverage(config, len(sources), generated_tests)
+
     if config.record_failures:
         write_compile_failure_summary()
-    metrics.total_pipeline_runtime_seconds = time.monotonic() - pipeline_started_at
-    append_library_runtime_metrics(config, total_sources, metrics)
+
+    metrics.total_pipeline_runtime_seconds = time.monotonic() - started_at
+    append_library_runtime_metrics(config, len(sources), metrics)
