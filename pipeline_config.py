@@ -40,11 +40,11 @@ class PipelineConfig:
         return DEFAULT_LIBRARIES_ROOT / self.group_id / self.artifact_id / self.version
 
     @property
-    def source_root(self) -> Path:
+    def source_folder(self) -> Path:
         return self.library_path / "src/main/java"
 
     @property
-    def test_root(self) -> Path:
+    def test_folder(self) -> Path:
         return self.library_path / "src/test/java"
 
 

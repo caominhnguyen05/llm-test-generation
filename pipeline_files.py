@@ -6,10 +6,10 @@ from preprocess import extract_package_and_class
 
 
 def generated_test_path(config: PipelineConfig, source: Path) -> Path:
-    source_file = config.source_root / source
-    package_name, class_name = extract_package_and_class(source_file, config.source_root)
+    source_file = config.source_folder / source
+    package_name, class_name = extract_package_and_class(source_file, config.source_folder)
     test_class = f"{class_name}Test"
-    return config.test_root / package_name.replace(".", "/") / f"{test_class}.java"
+    return config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
 
 def save_test_code(output_test_file: Path, test_code: str, label: str) -> None:

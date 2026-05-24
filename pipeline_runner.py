@@ -10,7 +10,7 @@ from pipeline_metrics import (
     LibraryRuntimeMetrics,
     append_library_coverage,
     append_library_runtime_metrics,
-    append_zero_library_coverage,
+    append_zero_coverage_row,
 )
 from preprocess import check_testability, extract_package_and_class, read_source_file
 from validation import ValidationResult
@@ -27,15 +27,15 @@ class PipelineResult:
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
     """Return Java source files in a library that are likely worth testing."""
-    if not config.source_root.exists():
-        print(f"Error: source root not found: {config.source_root}")
+    if not config.source_folder.exists():
+        print(f"Error: source root not found: {config.source_folder}")
         return []
 
     selected_sources: list[Path] = []
     skipped_sources: list[tuple[Path, str]] = []
-    for path in sorted(config.source_root.rglob("*.java")):
-        decision = check_testability(path, config.source_root)
-        relative_path = path.relative_to(config.source_root)
+    for path in sorted(config.source_folder.rglob("*.java")):
+        decision = check_testability(path, config.source_folder)
+        relative_path = path.relative_to(config.source_folder)
         if decision.testable:
             selected_sources.append(relative_path)
         else:
@@ -49,30 +49,27 @@ def find_testable_sources(config: PipelineConfig) -> list[Path]:
     return selected_sources
 
 
-def run_pipeline(
+def process_one_source(
     config: PipelineConfig,
     source: Path,
-    metrics: LibraryRuntimeMetrics | None = None,
+    metrics: LibraryRuntimeMetrics,
 ) -> PipelineResult:
     """Generate, save, validate, and repair a test for one Java source file."""
-    if not config.library_path.exists():
-        print(f"Error: library folder not found: {config.library_path}")
-        return PipelineResult(False, "library folder not found")
-
-    target_java_file = config.source_root / source
+    target_java_file = config.source_folder / source
     source_code = read_source_file(target_java_file)
-    package_name, class_name = extract_package_and_class(target_java_file, config.source_root)
+    package_name, class_name = extract_package_and_class(target_java_file, config.source_folder)
     test_class = f"{class_name}Test"
-    output_test_file = config.test_root / package_name.replace(".", "/") / f"{test_class}.java"
+    output_test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
-    print_pipeline_target(config, target_java_file, package_name, class_name, output_test_file)
+    print(f"  Library: {config.library}")
+    print(f"  Class: {class_name}")
 
     test_code = generate_initial_test(source_code, package_name, class_name, metrics)
     save_test_code(output_test_file, test_code, "Initial")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
-        validation_result = validate_test(test_code, test_class)
+        validation_result = validate_test(config, test_code, test_class)
 
         if validation_result.passed:
             print(f"SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
@@ -107,13 +104,16 @@ def run_pipeline(
 
 def run_library_pipeline(config: PipelineConfig) -> None:
     """Run the test-generation pipeline for every Java source file in a library."""
+    if not config.library_path.exists():
+        print(f"Error: library folder not found: {config.library_path}")
+        return
+    
     pipeline_started_at = time.monotonic()
     metrics = LibraryRuntimeMetrics()
     testable_sources = find_testable_sources(config)
 
     if not testable_sources:
-        print(f"No Java source files found under {config.source_root}")
-        finish_library_run(config, 0, metrics, pipeline_started_at)
+        print(f"No testable Java source files found under {config.source_folder}")
         return
 
     failures = process_sources(config, testable_sources, metrics)
@@ -122,7 +122,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     generated_test_classes = count_generated_test_classes(config, testable_sources)
     if generated_test_classes == 0:
         print("\nNo generated test classes survived. Writing zero coverage row.")
-        append_zero_library_coverage(config, len(testable_sources))
+        append_zero_coverage_row(config, len(testable_sources))
         finish_library_run(config, len(testable_sources), metrics, pipeline_started_at)
         return
 
@@ -141,7 +141,7 @@ def process_sources(
     for index, source in enumerate(sources, start=1):
         print(f"\n=== [{index}/{len(sources)}] {source} ===")
         try:
-            result = run_pipeline(config, source, metrics)
+            result = process_one_source(config, source, metrics)
             if not result.succeeded:
                 failures.append((source, result.message))
         except Exception as exc:
@@ -151,20 +151,6 @@ def process_sources(
             delete_generated_test_for_source(config, source, f"pipeline exception: {exc}")
 
     return failures
-
-
-def print_pipeline_target(
-    config: PipelineConfig,
-    target_java_file: Path,
-    package_name: str,
-    class_name: str,
-    output_test_file: Path,
-) -> None:
-    print(f"  Library: {config.library}")
-    print(f"  Source: {target_java_file}")
-    print(f"  Package: {package_name}")
-    print(f"  Class: {class_name}")
-    print(f"  Output: {output_test_file}")
 
 
 def handle_final_validation_failure(
