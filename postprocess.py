@@ -9,8 +9,6 @@ JUNIT4_IMPORTS = {
 JUNIT_SYMBOL_IMPORTS = {
     "@Before": "import org.junit.Before;",
     "@After": "import org.junit.After;",
-    "@BeforeClass": "import org.junit.BeforeClass;",
-    "@AfterClass": "import org.junit.AfterClass;",
 }
 
 JAVA_SYMBOL_IMPORTS = {
@@ -25,8 +23,6 @@ JAVA_SYMBOL_IMPORTS = {
     "IOException": "import java.io.IOException;",
     "StringReader": "import java.io.StringReader;",
     "StringWriter": "import java.io.StringWriter;",
-    "ByteArrayInputStream": "import java.io.ByteArrayInputStream;",
-    "ByteArrayOutputStream": "import java.io.ByteArrayOutputStream;",
 }
 
 def write_file(path: Path, content: str) -> None:
