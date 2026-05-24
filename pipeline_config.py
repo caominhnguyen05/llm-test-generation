@@ -10,10 +10,10 @@ MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
 ERROR_CONTEXT_CHARS = 6000
 
-COVERAGE_CSV = REPO_ROOT / "results/coverage/coverage_repair_1.csv"
-COST_CSV = REPO_ROOT / "results/cost/runtime_repair_1.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/llm_compile_failures_1.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/llm_compile_failure_summary_1.csv"
+COVERAGE_CSV = REPO_ROOT / "results/coverage_ollama/coverage_repair_1.csv"
+COST_CSV = REPO_ROOT / "results/cost_ollama/runtime_repair_1.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/compile_failures_1.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summary_1.csv"
 
 
 @dataclass(frozen=True)
@@ -24,8 +24,20 @@ class PipelineConfig:
     record_failures: bool = True
 
     @property
+    def group_id(self) -> str:
+        return parse_coordinate(self.library)[0]
+
+    @property
+    def artifact_id(self) -> str:
+        return parse_coordinate(self.library)[1]
+
+    @property
+    def version(self) -> str:
+        return parse_coordinate(self.library)[2]
+
+    @property
     def library_path(self) -> Path:
-        return coordinate_to_path(DEFAULT_LIBRARIES_ROOT, self.library)
+        return DEFAULT_LIBRARIES_ROOT / self.group_id / self.artifact_id / self.version
 
     @property
     def source_root(self) -> Path:
@@ -93,8 +105,7 @@ def parse_bool(value: str | bool) -> bool:
     raise argparse.ArgumentTypeError("Expected true or false.")
 
 
-def coordinate_to_path(libraries_root: Path, library: str) -> Path:
-    """Convert groupId:artifactId:version to libraries_root/groupId/artifactId/version."""
+def parse_coordinate(library: str) -> tuple[str, str, str]:
     parts = library.split(":")
 
     if len(parts) != 3 or any(not part for part in parts):
@@ -104,4 +115,4 @@ def coordinate_to_path(libraries_root: Path, library: str) -> Path:
         )
 
     group_id, artifact_id, version = parts
-    return libraries_root / group_id / artifact_id / version
+    return group_id, artifact_id, version
