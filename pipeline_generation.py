@@ -33,7 +33,7 @@ def generate_initial_test(
         get_generation_prompt(source_code, package_name, class_name),
     )
     
-    metrics.record_initial_call(call_metrics)
+    metrics.record_call(call_metrics)
     return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
