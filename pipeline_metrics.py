@@ -2,12 +2,12 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from coverage.run_coverage import append_row, read_coverage, read_maven_project, run_pruned_jacoco
+from coverage.run_coverage import append_coverage_row, build_coverage_row, run_coverage_after_removing_failures
 from llm.main import LLMCallMetrics
 from pipeline_config import COVERAGE_CSV, COST_CSV, PipelineConfig
 
 
-LLM_RUNTIME_FIELDNAMES = [
+COST_FIELDNAMES = [
     "group_id",
     "artifact_id",
     "version",
@@ -48,11 +48,12 @@ class LibraryRuntimeMetrics:
 def append_library_coverage(config: PipelineConfig, testable_source_files: int, generated_test_classes: int) -> None:
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
-    project = read_maven_project(config.library_path)
-    _, prune_result = run_pruned_jacoco(project.path, 300)
-    append_row(
-        read_coverage(
-            project,
+
+    prune_result = run_coverage_after_removing_failures(config.library_path, 300)
+    
+    append_coverage_row(
+        build_coverage_row(
+            config,
             testable_source_files=testable_source_files,
             generated_test_classes=generated_test_classes,
             test_counts=prune_result.test_counts,
@@ -62,14 +63,13 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     print(f"Coverage row written to {COVERAGE_CSV}")
 
 
-def append_zero_library_coverage(config: PipelineConfig, testable_source_files: int) -> None:
+def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int) -> None:
     """Append a zero-coverage row when no generated test class survived."""
-    project = read_maven_project(config.library_path)
-    append_row(
+    append_coverage_row(
         {
-            "group_id": project.group_id,
-            "artifact_id": project.artifact_id,
-            "version": project.version,
+            "group_id": config.group_id,
+            "artifact_id": config.artifact_id,
+            "version": config.version,
             "source": "LLM",
             "instruction_coverage": "0",
             "branch_coverage": "0",
@@ -99,13 +99,12 @@ def append_library_runtime_metrics(
     metrics: LibraryRuntimeMetrics,
 ) -> None:
     """Append one per-library runtime and LLM usage row."""
-    project = read_maven_project(config.library_path)
     total_llm_seconds = metrics.total_llm_generation_time_ns / 1_000_000_000
     total_pipeline_seconds = metrics.total_pipeline_runtime_seconds
     row = {
-        "group_id": project.group_id,
-        "artifact_id": project.artifact_id,
-        "version": project.version,
+        "group_id": config.group_id,
+        "artifact_id": config.artifact_id,
+        "version": config.version,
         "total_classes_under_test": str(total_classes_under_test),
         "total_llm_calls": str(metrics.total_llm_calls),
         "repair_calls": str(metrics.repair_calls),
@@ -115,7 +114,7 @@ def append_library_runtime_metrics(
         "total_output_tokens": str(metrics.total_output_tokens),
         "number_of_repair_attempts": str(config.attempts),
     }
-    append_csv_row(COST_CSV, LLM_RUNTIME_FIELDNAMES, row)
+    append_csv_row(COST_CSV, COST_FIELDNAMES, row)
     print(f"Runtime metrics row written to {COST_CSV}")
 
 
