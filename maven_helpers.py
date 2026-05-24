@@ -63,7 +63,7 @@ def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
 
 
 def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
-    print(f"\nRunning Maven tests for {test_class}...")
+    print(f"\nExecuting test class {test_class}...")
 
     command = [
         "mvn.cmd",
