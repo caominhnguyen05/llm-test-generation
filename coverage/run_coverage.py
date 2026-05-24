@@ -6,14 +6,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from coverage.config import FIELDNAMES
-
-
-@dataclass(frozen=True)
-class MavenProject:
-    path: Path
-    group_id: str
-    artifact_id: str
-    version: str
+from pipeline_config import PipelineConfig
 
 
 @dataclass(frozen=True)
@@ -30,24 +23,7 @@ class PruneResult:
     removed_methods: int = 0
 
 
-def read_maven_project(project_path: Path) -> MavenProject:
-    pom_path = project_path / "pom.xml"
-    root = ET.parse(pom_path).getroot()
-    namespace = _xml_namespace(root)
-
-    group_id = _find_text(root, "groupId", namespace) or _find_text(root, "parent/groupId", namespace)
-    artifact_id = _find_text(root, "artifactId", namespace)
-    version = _find_text(root, "version", namespace) or _find_text(root, "parent/version", namespace)
-
-    return MavenProject(
-        path=project_path,
-        group_id=group_id or "",
-        artifact_id=artifact_id or project_path.name,
-        version=version or "",
-    )
-
-
-def run_jacoco(project_path: Path, timeout: int) -> bool:
+def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
     print(f"Running JaCoCo for {project_path.name}...", file=sys.stderr)
     command = [
         "mvn.cmd",
@@ -77,7 +53,7 @@ def run_jacoco(project_path: Path, timeout: int) -> bool:
     return False
 
 
-def run_tests_and_prune_failures(project_path: Path, timeout: int) -> PruneResult:
+def run_tests_and_remove_failures(project_path: Path, timeout: int) -> PruneResult:
     """Run tests once, parse Surefire XML, and remove failing/erroring test methods."""
     print(f"Collecting Surefire failures for {project_path.name}...", file=sys.stderr)
     command = [
@@ -101,30 +77,30 @@ def run_tests_and_prune_failures(project_path: Path, timeout: int) -> PruneResul
         output = result.stdout + "\n" + result.stderr
         print(f"Initial test run failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
 
-    test_counts, failing_tests = read_surefire_results(project_path)
-    removed_methods = remove_failed_test_methods(project_path, failing_tests)
+    test_counts, failing_tests = read_surefire_test_results(project_path)
+    removed_methods = remove_failing_test_methods(project_path, failing_tests)
     if removed_methods:
         print(f"Removed {removed_methods} failing/erroring test method(s) from {project_path.name}.", file=sys.stderr)
     return PruneResult(test_counts, removed_methods)
 
 
-def run_pruned_jacoco(project_path: Path, timeout: int) -> tuple[bool, PruneResult]:
+def run_coverage_after_removing_failures(project_path: Path, timeout: int) -> PruneResult:
     """Remove failing/erroring tests before running JaCoCo, preserving original runtime counts."""
-    prune_result = run_tests_and_prune_failures(project_path, timeout)
-    success = run_jacoco(project_path, timeout)
-    return success, prune_result
+    prune_result = run_tests_and_remove_failures(project_path, timeout)
+    run_jacoco_coverage(project_path, timeout)
+    return prune_result
 
 
-def read_coverage(
-    project: MavenProject,
+def build_coverage_row(
+    config: PipelineConfig,
     testable_source_files: int | None = None,
     generated_test_classes: int | None = None,
     test_counts: TestCounts = TestCounts(),
 ) -> dict[str, str]:
     row = {
-        "group_id": project.group_id,
-        "artifact_id": project.artifact_id,
-        "version": project.version,
+        "group_id": config.group_id,
+        "artifact_id": config.artifact_id,
+        "version": config.version,
         "source": "LLM",
         "instruction_coverage": "",
         "branch_coverage": "",
@@ -144,7 +120,7 @@ def read_coverage(
         "runtime_error_rate": _rate(test_counts.runtime_errors, test_counts.total),
     }
 
-    report_path = project.path / "target/site/jacoco/jacoco.xml"
+    report_path = config.library_path / "target/site/jacoco/jacoco.xml"
     if not report_path.exists():
         print(f"Missing JaCoCo XML report: {report_path}", file=sys.stderr)
         return row
@@ -158,7 +134,7 @@ def read_coverage(
     return row
 
 
-def read_surefire_results(project_path: Path) -> tuple[TestCounts, dict[str, set[str]]]:
+def read_surefire_test_results(project_path: Path) -> tuple[TestCounts, dict[str, set[str]]]:
     reports_dir = project_path / "target/surefire-reports"
     if not reports_dir.exists():
         return TestCounts(), {}
@@ -199,7 +175,7 @@ def read_surefire_results(project_path: Path) -> tuple[TestCounts, dict[str, set
     return TestCounts(total, passed, failed_assertions, runtime_errors), failing_tests
 
 
-def remove_failed_test_methods(project_path: Path, failing_tests: dict[str, set[str]]) -> int:
+def remove_failing_test_methods(project_path: Path, failing_tests: dict[str, set[str]]) -> int:
     removed_methods = 0
     for classname, method_names in failing_tests.items():
         test_file = _find_test_file(project_path, classname)
@@ -210,7 +186,7 @@ def remove_failed_test_methods(project_path: Path, failing_tests: dict[str, set[
     return removed_methods
 
 
-def append_row(row: dict[str, str], output_path: Path) -> None:
+def append_coverage_row(row: dict[str, str], output_path: Path) -> None:
     """Append one coverage row without modifying existing CSV rows."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     should_write_header = not output_path.exists() or output_path.stat().st_size == 0
@@ -370,26 +346,9 @@ def _rate(numerator: int | None, denominator: int | None) -> str:
     return f"{numerator / denominator:.4f}"
 
 
-def _xml_namespace(root: ET.Element) -> str:
-    if root.tag.startswith("{"):
-        return root.tag.split("}", 1)[0].strip("{")
-    return ""
-
-
 def _local_xml_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
 def _has_child(element: ET.Element, child_name: str) -> bool:
     return any(_local_xml_name(child.tag) == child_name for child in element)
-
-
-def _find_text(root: ET.Element, path: str, namespace: str) -> str | None:
-    if namespace:
-        namespaced_path = "/".join(f"{{{namespace}}}{part}" for part in path.split("/"))
-        element = root.find(namespaced_path)
-    else:
-        element = root.find(path)
-    if element is None or element.text is None:
-        return None
-    return element.text.strip()
