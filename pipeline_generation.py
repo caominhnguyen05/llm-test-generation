@@ -55,12 +55,8 @@ def generate_repair_test(
     return normalize_test_code(llm_output, package_name, class_name, source_code)
 
 
-def validate_test(config: PipelineConfig, test_code: str, test_class: str) -> ValidationResult:
-    """Validate a generated test through structure, compile, and runtime checks."""
-    structure_result = validate_structure(test_code, test_class.removesuffix("Test"))
-    if not structure_result.passed:
-        return structure_result
-
+def validate_test(config: PipelineConfig, test_class: str) -> ValidationResult:
+    """Validate a generated test through compile and runtime checks."""
     compile_result = validate_compile(config, test_class)
     if not compile_result.passed:
         return compile_result

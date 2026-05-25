@@ -17,7 +17,7 @@ from pipeline_metrics import (
     append_zero_coverage_row,
 )
 from preprocess import check_testability, extract_package_and_class, read_java_source
-from validation import ValidationResult
+from validation import ValidationResult, validate_structure
 
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
@@ -58,14 +58,17 @@ def process_one_source(
     test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
     print(f"  Library: {config.library}")
-    print(f"  Class: {class_name}")
 
     test_code = generate_initial_test(source_code, package_name, class_name, metrics)
+    structure_result = validate_structure(test_code, class_name)
+    if not structure_result.passed:
+        return handle_structure_failure(config, source, test_class, structure_result.message)
+
     save_test_code(test_file, test_code, "Initial")
 
     for attempt in range(config.attempts + 1):
         print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
-        result = validate_test(config, test_code, test_class)
+        result = validate_test(config, test_class)
 
         if result.passed:
             print(f"SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
@@ -88,9 +91,31 @@ def process_one_source(
             class_name,
             metrics,
         )
+        structure_result = validate_structure(test_code, class_name)
+        if not structure_result.passed:
+            return handle_structure_failure(config, source, test_class, structure_result.message)
+
         save_test_code(test_file, test_code, "Repaired")
 
     return "validation failed"
+
+
+def handle_structure_failure(
+    config: PipelineConfig,
+    source: Path,
+    test_class: str,
+    message: str,
+) -> str:
+    print(f"Structure validation failed for {test_class}: {message}")
+
+    if config.record_failures:
+        record_compile_failure(
+            config,
+            source,
+            test_class,
+            ValidationResult(False, "structure", message),
+        )
+    return "structure validation failed"
 
 
 def handle_validation_failure(
