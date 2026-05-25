@@ -61,7 +61,7 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
 
 
 def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int) -> None:
-    """Append a zero-coverage row when no generated test class survived."""
+    """Append a zero-coverage row when no generated test class compiled."""
     append_coverage_row(
         {
             "group_id": config.group_id,
