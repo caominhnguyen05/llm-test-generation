@@ -13,7 +13,7 @@ from validation import ValidationResult, validate_compile, validate_runtime, val
 
 
 def generate_llm_response(prompt: str) -> tuple[str, LLMCallMetrics]:
-    """Route LLM calls through the backend selected in the pipeline config."""
+    """Route LLM calls through the backend selected in the LLM config."""
     if LLM_BACKEND == "openrouter":
         return generate_llm_response_openrouter(prompt)
     if LLM_BACKEND == "ollama":

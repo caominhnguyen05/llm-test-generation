@@ -15,7 +15,7 @@ from pipeline_metrics import (
     append_library_runtime_metrics,
     append_zero_coverage_row,
 )
-from preprocess import check_testability, extract_package_and_class, read_source_file
+from preprocess import check_testability, extract_package_and_class, read_java_source
 from validation import ValidationResult
 
 
@@ -50,7 +50,7 @@ def process_one_source(
     metrics: LibraryRuntimeMetrics,
 ) -> str | None:
     source_file = config.source_folder / source
-    source_code = read_source_file(source_file)
+    source_code = read_java_source(source_file)
     package_name, class_name = extract_package_and_class(source_file, config.source_folder)
 
     test_class = f"{class_name}Test"

@@ -3,15 +3,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-def remove_license_comment(source_code: str) -> str:
+def remove_leading_block_comment(source_code: str) -> str:
     if source_code.strip().startswith("/*") and "*/" in source_code:
         return source_code.split("*/", 1)[1].strip()
     return source_code.strip()
 
 
-def read_source_file(path: Path) -> str:
+def read_java_source(path: Path) -> str:
     with open(path, "r") as file:
-        return remove_license_comment(file.read())
+        return remove_leading_block_comment(file.read())
 
 
 def extract_package_and_class(java_file: Path, source_root: Path) -> tuple[str, str]:
@@ -96,7 +96,7 @@ def check_testability(java_file: Path, source_root: Path) -> TestabilityDecision
     if java_file.name in {"package-info.java", "module-info.java"}:
         return TestabilityDecision(False, "metadata source file")
 
-    source_code = strip_comments_and_strings(read_source_file(java_file))
+    source_code = strip_comments_and_strings(read_java_source(java_file))
     _, class_name = extract_package_and_class(java_file, source_root)
     declaration = find_top_level_declaration(source_code, class_name)
     if declaration is None:
