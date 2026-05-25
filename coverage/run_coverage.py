@@ -80,7 +80,7 @@ def run_tests_and_remove_failures(project_path: Path, timeout: int) -> PruneResu
     test_counts, failing_tests = read_surefire_test_results(project_path)
     removed_methods = remove_failing_test_methods(project_path, failing_tests)
     if removed_methods:
-        print(f"Removed {removed_methods} failing/erroring test method(s) from {project_path.name}.", file=sys.stderr)
+        print(f"Removed {removed_methods} failing/erroring test method(s) from {project_path.name}.")
     return PruneResult(test_counts, removed_methods)
 
 
@@ -93,8 +93,8 @@ def run_coverage_after_removing_failures(project_path: Path, timeout: int) -> Pr
 
 def build_coverage_row(
     config: PipelineConfig,
-    testable_source_files: int | None = None,
-    generated_test_classes: int | None = None,
+    testable_source_files: int,
+    generated_test_classes: int,
     test_counts: TestCounts = TestCounts(),
 ) -> dict[str, str]:
     row = {
@@ -108,8 +108,8 @@ def build_coverage_row(
         "complexity_coverage": "",
         "method_coverage": "",
         "class_coverage": "",
-        "testable_source_files": _optional_int(testable_source_files),
-        "generated_test_classes": _optional_int(generated_test_classes),
+        "testable_source_files": str(testable_source_files),
+        "generated_test_classes": str(generated_test_classes),
         "compilation_success_rate": _rate(generated_test_classes, testable_source_files),
         "tests_total": str(test_counts.total),
         "tests_passed": str(test_counts.passed),
@@ -336,12 +336,8 @@ def _merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def _optional_int(value: int | None) -> str:
-    return "" if value is None else str(value)
-
-
-def _rate(numerator: int | None, denominator: int | None) -> str:
-    if numerator is None or denominator is None or denominator == 0:
+def _rate(numerator: int, denominator: int) -> str:
+    if denominator == 0:
         return ""
     return f"{numerator / denominator:.4f}"
 
