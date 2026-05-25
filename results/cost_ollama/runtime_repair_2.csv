@@ -1,0 +1,13 @@
+group_id,artifact_id,version,total_classes_under_test,total_llm_calls,repair_calls,total_llm_generation_time_seconds,total_pipeline_runtime_seconds,total_prompt_tokens,total_output_tokens,number_of_repair_attempts
+aopalliance,aopalliance,1.0,3,9,6,59.9417,106.2660,11559,1347,2
+com.github.lalyos,jfiglet,0.0.8,2,6,4,87.8979,131.3750,14489,2240,2
+com.github.spotbugs,spotbugs-annotations,4.8.6,2,2,0,15.7258,39.2180,1476,439,2
+com.squareup.retrofit2,converter-gson,3.0.0,4,12,8,147.3537,216.9690,19602,4006,2
+commons-cli,commons-cli,1.2,19,46,27,736.6223,1348.6250,118178,18385,2
+commons-logging,commons-logging,1.2,13,35,22,715.7837,1122.9530,115129,17652,2
+io.jsonwebtoken,jjwt-jackson,0.11.2,2,6,4,97.1360,141.2500,11305,2730,2
+io.swagger.core.v3,swagger-annotations,2.2.8,4,7,3,61.0467,109.9840,8670,1631,2
+jakarta.transaction,jakarta.transaction-api,2.0.1,10,14,4,70.9137,218.1100,15499,1730,2
+org.apache.commons,commons-csv,1.8,9,16,8,361.2458,768.4840,50843,8816,2
+org.apache.logging.log4j,log4j-to-slf4j,2.17.2,5,15,10,282.2629,438.5160,31318,7426,2
+org.checkerframework,checker-qual,3.12.0,3,8,5,178.5059,267.9530,25737,4356,2
