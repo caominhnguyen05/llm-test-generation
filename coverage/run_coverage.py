@@ -18,9 +18,9 @@ class TestCounts:
 
 
 @dataclass(frozen=True)
-class PruneResult:
+class CoveragePrepResult:
     test_counts: TestCounts
-    removed_methods: int = 0
+    ignored_methods: int = 0
 
 
 def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
@@ -53,8 +53,8 @@ def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
     return False
 
 
-def run_tests_and_remove_failures(project_path: Path, timeout: int) -> PruneResult:
-    """Run tests once, parse Surefire XML, and remove failing/erroring test methods."""
+def run_tests_and_ignore_failures(project_path: Path, timeout: int) -> CoveragePrepResult:
+    """Run tests once, parse Surefire XML, and ignore failing/erroring test methods."""
     print(f"Collecting Surefire failures for {project_path.name}...", file=sys.stderr)
     command = [
         "mvn.cmd",
@@ -78,17 +78,17 @@ def run_tests_and_remove_failures(project_path: Path, timeout: int) -> PruneResu
         print(f"Initial test run failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
 
     test_counts, failing_tests = read_surefire_test_results(project_path)
-    removed_methods = remove_failing_test_methods(project_path, failing_tests)
-    if removed_methods:
-        print(f"Removed {removed_methods} failing/erroring test method(s) from {project_path.name}.")
-    return PruneResult(test_counts, removed_methods)
+    ignored_methods = ignore_failing_test_methods(project_path, failing_tests)
+    if ignored_methods:
+        print(f"Ignored {ignored_methods} failing/erroring test method(s) from {project_path.name}.")
+    return CoveragePrepResult(test_counts, ignored_methods)
 
 
-def run_coverage_after_removing_failures(project_path: Path, timeout: int) -> PruneResult:
-    """Remove failing/erroring tests before running JaCoCo, preserving original runtime counts."""
-    prune_result = run_tests_and_remove_failures(project_path, timeout)
+def run_coverage_after_ignoring_failures(project_path: Path, timeout: int) -> CoveragePrepResult:
+    """Ignore failing/erroring tests before running JaCoCo, preserving original runtime counts."""
+    prep_result = run_tests_and_ignore_failures(project_path, timeout)
     run_jacoco_coverage(project_path, timeout)
-    return prune_result
+    return prep_result
 
 
 def build_coverage_row(
@@ -175,15 +175,16 @@ def read_surefire_test_results(project_path: Path) -> tuple[TestCounts, dict[str
     return TestCounts(total, passed, failed_assertions, runtime_errors), failing_tests
 
 
-def remove_failing_test_methods(project_path: Path, failing_tests: dict[str, set[str]]) -> int:
-    removed_methods = 0
+def ignore_failing_test_methods(project_path: Path, failing_tests: dict[str, set[str]]) -> int:
+    ignored_methods = 0
     for classname, method_names in failing_tests.items():
         test_file = _find_test_file(project_path, classname)
         if test_file is None:
             print(f"Could not find source file for failing test class {classname}", file=sys.stderr)
             continue
-        removed_methods += _remove_methods_from_java_file(test_file, method_names)
-    return removed_methods
+
+        ignored_methods += _ignore_methods_in_java_file(test_file, method_names)
+    return ignored_methods
 
 
 def append_coverage_row(row: dict[str, str], output_path: Path) -> None:
@@ -231,30 +232,23 @@ def _find_test_file(project_path: Path, classname: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def _remove_methods_from_java_file(test_file: Path, method_names: set[str]) -> int:
+def _ignore_methods_in_java_file(test_file: Path, method_names: set[str]) -> int:
     lines = test_file.read_text(encoding="utf-8").splitlines(keepends=True)
-    ranges = _find_test_method_ranges(lines, method_names)
-    if not ranges:
+    insertion_indexes = _find_ignore_annotation_indexes(lines, method_names)
+    if not insertion_indexes:
         print(f"No matching failing method(s) found in {test_file}: {sorted(method_names)}", file=sys.stderr)
         return 0
 
-    kept_lines: list[str] = []
-    range_index = 0
-    current_range = ranges[range_index]
-    for line_index, line in enumerate(lines):
-        if current_range[0] <= line_index <= current_range[1]:
-            if line_index == current_range[1] and range_index + 1 < len(ranges):
-                range_index += 1
-                current_range = ranges[range_index]
-            continue
-        kept_lines.append(line)
+    for index in sorted(insertion_indexes, reverse=True):
+        indent = re.match(r"\s*", lines[index]).group(0)
+        lines.insert(index, f'{indent}@Ignore("Ignored after failing during coverage collection")\n')
 
-    test_file.write_text("".join(kept_lines), encoding="utf-8")
-    return len(ranges)
+    test_file.write_text("".join(lines), encoding="utf-8")
+    return len(insertion_indexes)
 
 
-def _find_test_method_ranges(lines: list[str], method_names: set[str]) -> list[tuple[int, int]]:
-    ranges: list[tuple[int, int]] = []
+def _find_ignore_annotation_indexes(lines: list[str], method_names: set[str]) -> list[int]:
+    insertion_indexes: list[int] = []
     index = 0
     while index < len(lines):
         stripped = lines[index].strip()
@@ -267,18 +261,21 @@ def _find_test_method_ranges(lines: list[str], method_names: set[str]) -> list[t
         while signature_index < len(lines) and lines[signature_index].strip().startswith("@"):
             signature_index += 1
 
+        annotation_text = " ".join(line.strip() for line in lines[annotation_start:signature_index])
+        if "Ignore" in annotation_text:
+            index = signature_index + 1
+            continue
+
         signature_parts: list[str] = []
         search_index = signature_index
         while search_index < len(lines):
             signature_parts.append(lines[search_index].strip())
             signature_text = " ".join(signature_parts)
             method_name = _matching_method_name(signature_text, method_names)
-            if method_name and "{" in lines[search_index]:
-                method_end = _method_end_line(lines, search_index)
-                if method_end is not None:
-                    ranges.append((annotation_start, method_end))
-                    index = method_end + 1
-                    break
+            if method_name:
+                insertion_indexes.append(annotation_start)
+                index = search_index + 1
+                break
             if "{" in lines[search_index] or ";" in lines[search_index]:
                 break
             search_index += 1
@@ -288,7 +285,7 @@ def _find_test_method_ranges(lines: list[str], method_names: set[str]) -> list[t
         if index <= signature_index:
             index += 1
 
-    return _merge_ranges(ranges)
+    return insertion_indexes
 
 
 def _annotation_block_start(lines: list[str], test_annotation_index: int) -> int:
@@ -303,37 +300,6 @@ def _matching_method_name(signature_text: str, method_names: set[str]) -> str | 
         if re.search(rf"\b{re.escape(method_name)}\s*\(", signature_text):
             return method_name
     return None
-
-
-def _method_end_line(lines: list[str], method_start: int) -> int | None:
-    brace_depth = 0
-    seen_opening_brace = False
-    for index in range(method_start, len(lines)):
-        code = _strip_java_line_comments(lines[index])
-        brace_depth += code.count("{")
-        if code.count("{"):
-            seen_opening_brace = True
-        brace_depth -= code.count("}")
-        if seen_opening_brace and brace_depth <= 0:
-            return index
-    return None
-
-
-def _strip_java_line_comments(line: str) -> str:
-    return line.split("//", 1)[0]
-
-
-def _merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    if not ranges:
-        return []
-    merged = [ranges[0]]
-    for start, end in ranges[1:]:
-        previous_start, previous_end = merged[-1]
-        if start <= previous_end:
-            merged[-1] = (previous_start, max(previous_end, end))
-        else:
-            merged.append((start, end))
-    return merged
 
 
 def _rate(numerator: int, denominator: int) -> str:

@@ -2,7 +2,7 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from coverage.run_coverage import append_coverage_row, build_coverage_row, run_coverage_after_removing_failures
+from coverage.run_coverage import append_coverage_row, build_coverage_row, run_coverage_after_ignoring_failures
 from llm.main import LLMCallMetrics
 from pipeline_config import COVERAGE_CSV, COST_CSV, PipelineConfig
 
@@ -46,14 +46,14 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
 
-    prune_result = run_coverage_after_removing_failures(config.library_path, 300)
+    prep_result = run_coverage_after_ignoring_failures(config.library_path, 300)
     
     append_coverage_row(
         build_coverage_row(
             config,
             testable_source_files=testable_source_files,
             generated_test_classes=generated_test_classes,
-            test_counts=prune_result.test_counts,
+            test_counts=prep_result.test_counts,
         ),
         COVERAGE_CSV,
     )
