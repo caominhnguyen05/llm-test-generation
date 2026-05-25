@@ -9,6 +9,8 @@ from llm.config import (
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
     OPENROUTER_MODEL,
+    LLM_TEMPERATURE,
+    LLM_SEED,
 )
 
 
@@ -44,8 +46,8 @@ def generate_llm_response_openrouter(
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        temperature=0,
-        seed=42,
+        temperature=LLM_TEMPERATURE,
+        seed=LLM_SEED,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -86,8 +88,8 @@ def generate_llm_response_ollama(prompt: str, model: str) -> tuple[str, LLMCallM
         ],
         stream=True,
         options={
-            "temperature": 0,
-            "seed": 42,
+            "temperature": LLM_TEMPERATURE,
+            "seed": LLM_SEED,
         }
     )
 
