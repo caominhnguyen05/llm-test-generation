@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from shutil import rmtree
 
 from pipeline_config import PipelineConfig
 from pipeline_failures import record_compile_failure, write_compile_failure_summary
@@ -122,6 +123,11 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     if not config.library_path.exists():
         print(f"Error: library folder not found: {config.library_path}")
         return
+
+    test_root = config.library_path / "src/test"
+    if test_root.exists():
+        rmtree(test_root)
+        print(f"Deleted existing test folder: {test_root}")
 
     started_at = time.monotonic()
     metrics = LibraryRuntimeMetrics()
