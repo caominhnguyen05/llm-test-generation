@@ -10,8 +10,12 @@ def remove_leading_block_comment(source_code: str) -> str:
 
 
 def read_java_source(path: Path) -> str:
-    with open(path, "r") as file:
-        return remove_leading_block_comment(file.read())
+    raw_source = path.read_bytes()
+    try:
+        source_code = raw_source.decode("utf-8")
+    except UnicodeDecodeError:
+        source_code = raw_source.decode("utf-8", errors="replace")
+    return remove_leading_block_comment(source_code)
 
 
 def extract_package_and_class(java_file: Path, source_root: Path) -> tuple[str, str]:
