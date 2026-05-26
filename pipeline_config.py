@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_LIBRARIES_ROOT = Path("libraries_no_repair")
+DEFAULT_LIBRARIES_ROOT = Path("libraries_repair_1")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 
 MAX_REPAIR_ATTEMPTS = 2
@@ -21,7 +21,6 @@ class PipelineConfig:
     library: str
     attempts: int
     libraries_csv: Path | None = None
-    record_failures: bool = True
 
     @property
     def group_id(self) -> str:
@@ -70,13 +69,6 @@ def parse_args() -> PipelineConfig:
     )
 
     parser.add_argument(
-        "--record_failures",
-        type=parse_bool,
-        default=True,
-        help="Whether to record compile/structure failures to CSV. Use --record_failures=False to disable.",
-    )
-
-    parser.add_argument(
         "--libraries_csv",
         type=Path,
         default=None,
@@ -89,20 +81,7 @@ def parse_args() -> PipelineConfig:
         library=args.library,
         attempts=args.attempts,
         libraries_csv=args.libraries_csv,
-        record_failures=args.record_failures,
     )
-
-
-def parse_bool(value: str | bool) -> bool:
-    if isinstance(value, bool):
-        return value
-
-    normalized = value.strip().lower()
-    if normalized == "true":
-        return True
-    if normalized == "false":
-        return False
-    raise argparse.ArgumentTypeError("Expected true or false.")
 
 
 def parse_coordinate(library: str) -> tuple[str, str, str]:
