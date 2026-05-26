@@ -1,6 +1,31 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from pipeline_config import PipelineConfig
+
+def find_testable_sources(config: PipelineConfig) -> list[Path]:
+    if not config.source_folder.exists():
+        print(f"Error: source folder not found: {config.source_folder}")
+        return []
+
+    sources = []
+    skipped = []
+
+    for path in sorted(config.source_folder.rglob("*.java")):
+        decision = check_testability(path, config.source_folder)
+        relative_path = path.relative_to(config.source_folder)
+
+        if decision.testable:
+            sources.append(relative_path)
+        else:
+            skipped.append((relative_path, decision.reason))
+
+    if skipped:
+        print(f"Preprocessing skipped {len(skipped)} likely non-testable source files:")
+        for source, reason in skipped:
+            print(f"- {source}: {reason}")
+
+    return sources
 
 
 def remove_leading_block_comment(source_code: str) -> str:
@@ -10,11 +35,7 @@ def remove_leading_block_comment(source_code: str) -> str:
 
 
 def read_java_source(path: Path) -> str:
-    raw_source = path.read_bytes()
-    try:
-        source_code = raw_source.decode("utf-8")
-    except UnicodeDecodeError:
-        source_code = raw_source.decode("utf-8", errors="replace")
+    source_code = path.read_text(encoding="utf-8", errors="replace")
     return remove_leading_block_comment(source_code)
 
 
