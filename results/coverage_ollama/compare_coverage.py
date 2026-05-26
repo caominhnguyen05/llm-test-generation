@@ -44,7 +44,7 @@ def main() -> None:
     root_dir = Path(__file__).resolve().parents[2]
 
     # Load CSV files
-    llm = load_coverage_csv(root_dir / "results" / "coverage" /"llm_coverage_final.csv")
+    llm = load_coverage_csv(root_dir / "results" / "coverage_ollama" / "coverage_repair_2.csv")
     evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_original.csv")
 
     # Find libraries that exist in both CSV files.
@@ -66,7 +66,7 @@ def main() -> None:
 
     output_dir = root_dir / "results" / "coverage"
     output_dir.mkdir(exist_ok=True)
-    summary.to_csv(output_dir / "coverage_summary_table.csv")
+    # summary.to_csv(output_dir / "coverage_summary_table.csv")
 
     with open(output_dir / "coverage_summary_table.tex", "w", encoding="utf-8") as f:
         f.write(summary.to_latex())
