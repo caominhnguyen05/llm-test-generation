@@ -1,4 +1,3 @@
-from pipeline_config import PipelineConfig
 from llm.config import OLLAMA_MODEL, LLM_BACKEND
 from llm.main import (
     LLMCallMetrics,
@@ -9,7 +8,7 @@ from llm.main import (
 )
 from pipeline_metrics import LibraryRuntimeMetrics
 from postprocess import normalize_test_code
-from validation import ValidationResult, validate_compile, validate_runtime, validate_structure
+from validation import ValidationResult
 
 
 def generate_llm_response(prompt: str) -> tuple[str, LLMCallMetrics]:
@@ -53,16 +52,3 @@ def generate_repair_test(
     
     metrics.record_repair_call(call_metrics)
     return normalize_test_code(llm_output, package_name, class_name, source_code)
-
-
-def validate_test(config: PipelineConfig, test_class: str) -> ValidationResult:
-    """Validate a generated test through compile and runtime checks."""
-    compile_result = validate_compile(config, test_class)
-    if not compile_result.passed:
-        return compile_result
-
-    runtime_result = validate_runtime(config, test_class)
-    if not runtime_result.passed:
-        return runtime_result
-
-    return ValidationResult(True, "complete", runtime_result.message)
