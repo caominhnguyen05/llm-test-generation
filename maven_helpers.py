@@ -41,8 +41,6 @@ def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         "-q",
         "clean",
         "test-compile",
-        "-Drat.skip=true",
-        "-Danimal.sniffer.skip=true",
     ]
 
     with only_test_class_visible(library_path, test_class):
@@ -70,8 +68,6 @@ def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         "-q",
         "test",
         f"-Dtest={test_class}",
-        "-Drat.skip=true",
-        "-Danimal.sniffer.skip=true",
     ]
 
     with only_test_class_visible(library_path, test_class):
