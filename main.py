@@ -8,7 +8,7 @@ from pipeline_runner import run_library_pipeline
 
 def read_libraries_csv(csv_path: Path) -> list[str]:
     """Read Maven coordinates from a CSV file."""
-    libraries: list[str] = []
+    libraries = []
 
     with open(csv_path, "r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
@@ -30,15 +30,14 @@ def main() -> None:
         run_library_pipeline(config)
         return
 
-    libraries = read_libraries_csv(config.libraries_csv)
+    libraries_list = read_libraries_csv(config.libraries_csv)
 
-    for index, library in enumerate(libraries, start=1):
-        print(f"\n==============================")
-        print(f"Running library {index}/{len(libraries)}: {library}")
-        print(f"==============================")
+    for index, library in enumerate(libraries_list, start=1):
+        print(f"\n{'=' * 15}")
+        print(f"Running library {index}/{len(libraries_list)}: {library}")
+        print(f"{'=' * 15}")
 
-        library_config = replace(config, library=library)
-        run_library_pipeline(library_config)
+        run_library_pipeline(replace(config, library=library))
 
 
 if __name__ == "__main__":
