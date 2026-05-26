@@ -10,17 +10,13 @@ class ValidationResult:
     message: str = ""
 
 
-def check_test_class_structure(test_code: str, class_name: str) -> list[str]:
+def validate_structure(test_code: str, class_name: str) -> ValidationResult:
     issues = []
     if f"public class {class_name}Test" not in test_code:
         issues.append(f"missing public class {class_name}Test declaration")
     if "@Test" not in test_code:
         issues.append("missing @Test method annotation")
-    return issues
 
-
-def validate_structure(test_code: str, class_name: str) -> ValidationResult:
-    issues = check_test_class_structure(test_code, class_name)
     if issues:
         return ValidationResult(False, "structure", ", ".join(issues))
     return ValidationResult(True, "structure")
@@ -28,13 +24,21 @@ def validate_structure(test_code: str, class_name: str) -> ValidationResult:
 
 def validate_compile(config: PipelineConfig, test_class: str) -> ValidationResult:
     success, output = compile_test(config.library_path, test_class)
-    if not success:
-        return ValidationResult(False, "compile", output)
-    return ValidationResult(True, "compile")
+    return ValidationResult(success, "compile", output)
 
 
 def validate_runtime(config: PipelineConfig, test_class: str) -> ValidationResult:
     success, output = execute_test(config.library_path, test_class)
-    if not success:
-        return ValidationResult(False, "runtime", output)
-    return ValidationResult(True, "runtime", output)
+    return ValidationResult(success, "runtime", output)
+
+def validate_test(config: PipelineConfig, test_class: str) -> ValidationResult:
+    """Validate a generated test through compile and runtime checks."""
+    compile_result = validate_compile(config, test_class)
+    if not compile_result.passed:
+        return compile_result
+
+    runtime_result = validate_runtime(config, test_class)
+    if not runtime_result.passed:
+        return runtime_result
+
+    return ValidationResult(True, "complete", runtime_result.message)
