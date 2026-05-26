@@ -3,23 +3,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_LIBRARIES_ROOT = Path("libraries_repair_1")
+DEFAULT_LIBRARIES_ROOT = Path("libraries_test")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 
 MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
 ERROR_CONTEXT_CHARS = 6000
 
-COVERAGE_CSV = REPO_ROOT / "results/coverage_ollama/coverage_repair_1.csv"
-COST_CSV = REPO_ROOT / "results/cost_ollama/runtime_repair_1.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/compile_failures_1.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summary_1.csv"
+COVERAGE_CSV = REPO_ROOT / "results/coverage_ollama/coverage_repair.csv"
+COST_CSV = REPO_ROOT / "results/cost_ollama/runtime_repair.csv"
+COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/compile_failures.csv"
+COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summary.csv"
 
 
 @dataclass(frozen=True)
 class PipelineConfig:
     library: str
     attempts: int
+    libraries_root: Path = DEFAULT_LIBRARIES_ROOT
     libraries_csv: Path | None = None
 
     @property
@@ -36,11 +37,11 @@ class PipelineConfig:
 
     @property
     def library_path(self) -> Path:
-        return DEFAULT_LIBRARIES_ROOT / self.group_id / self.artifact_id / self.version
+        return self.libraries_root / self.group_id / self.artifact_id / self.version
 
     @property
     def source_folder(self) -> Path:
-        return self.library_path / "src/main/java"
+        return self.library_path / "prompt_sources"
 
     @property
     def test_folder(self) -> Path:
@@ -69,6 +70,13 @@ def parse_args() -> PipelineConfig:
     )
 
     parser.add_argument(
+        "--libraries_root",
+        type=Path,
+        default=DEFAULT_LIBRARIES_ROOT,
+        help="Root folder containing all sample libraries.",
+    )
+
+    parser.add_argument(
         "--libraries_csv",
         type=Path,
         default=None,
@@ -80,6 +88,7 @@ def parse_args() -> PipelineConfig:
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
+        libraries_root=args.libraries_root,
         libraries_csv=args.libraries_csv,
     )
 
@@ -95,3 +104,11 @@ def parse_coordinate(library: str) -> tuple[str, str, str]:
 
     group_id, artifact_id, version = parts
     return group_id, artifact_id, version
+
+
+def coordinate_to_path(libraries_root: Path, library: str) -> Path | None:
+    try:
+        group_id, artifact_id, version = parse_coordinate(library)
+    except ValueError:
+        return None
+    return libraries_root / group_id / artifact_id / version
