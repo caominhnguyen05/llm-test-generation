@@ -29,7 +29,6 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
     if stage == "structure":
         return "structure_error"
 
-    normalized = message.lower()
     patterns = [
         ("junit_version_mismatch", r"org\.junit\.jupiter|jupiter.*does not exist|package org\.junit\.jupiter does not exist"),
         ("missing_import", r"package .+ does not exist|import .+ cannot be resolved"),
@@ -47,7 +46,7 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
         ("syntax_error", r"';' expected|illegal start of|reached end of file while parsing|not a statement|class, interface, enum, or record expected"),
     ]
     for category, pattern in patterns:
-        if re.search(pattern, normalized, re.DOTALL):
+        if re.search(pattern, message.lower(), re.DOTALL):
             return category
     return "other_compile_error"
 
