@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
-from coverage.run_coverage import build_coverage_row, run_coverage_after_ignoring_failures
+from coverage.main import collect_coverage_after_ignoring_failures
+from coverage.jacoco import build_coverage_row
 from llm.main import LLMCallMetrics
 from pipeline_config import COVERAGE_CSV, COST_CSV, PipelineConfig
 
@@ -66,7 +67,7 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
 
-    prep_result = run_coverage_after_ignoring_failures(config.library_path, 300)
+    prep_result = collect_coverage_after_ignoring_failures(config.library_path, 300)
 
     row = build_coverage_row(
         config,
@@ -121,4 +122,4 @@ def append_library_runtime_metrics(
     }
 
     append_csv_row(COST_CSV, COST_FIELDNAMES, row)
-    print(f"Runtime metrics row written to {COST_CSV}")
+    print(f"Cost metrics row written to {COST_CSV}")
