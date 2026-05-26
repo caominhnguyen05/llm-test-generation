@@ -1,165 +1,174 @@
 import csv
-import requests
-import subprocess
-from pathlib import Path
-import zipfile
 import shutil
+import subprocess
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 import xml.etree.ElementTree as ET
+import requests
+
+from config import (FIXED_DEPENDENCIES, 
+                    FIXED_PLUGINS)
 
 
-CSV_FILE = "csv_data/evosuite_results.csv"
-OUTPUT_DIR = Path("libraries_sample")
+CSV_FILE = Path("csv_data/evosuite_results_one.csv")
+OUTPUT_DIR = Path("libraries_test")
 MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
+
 POM_NS = "http://maven.apache.org/POM/4.0.0"
-MIN_JAVA_VERSION = 8
 DEFAULT_JAVA_VERSION = "8"
+MIN_JAVA_VERSION = 8
+COMPILER_PLUGIN_VERSION = "3.11.0"
+
 ET.register_namespace("", POM_NS)
 
-# =========================
-# HELPERS
-# =========================
-def build_source_url(group_id, artifact_id, version):
-    group_path = group_id.replace(".", "/")
-    filename = f"{artifact_id}-{version}-sources.jar"
-    url = f"{MAVEN_CENTRAL}/{group_path}/{artifact_id}/{version}/{filename}"
-    return url, filename
 
-def build_pom_url(group_id: str, artifact_id: str, version: str) -> tuple[str, str]:
-    group_path = group_id.replace(".", "/")
-    filename = f"{artifact_id}-{version}.pom"
-    url = f"{MAVEN_CENTRAL}/{group_path}/{artifact_id}/{version}/{filename}"
-    return url, filename
+@dataclass(frozen=True)
+class MavenArtifact:
+    group_id: str
+    artifact_id: str
+    version: str
 
-def download_pom_from_maven_central(target_pom: Path, group_id: str, artifact_id: str, version: str) -> bool:
-    url, _ = build_pom_url(group_id, artifact_id, version)
-    return download_file(url, target_pom)
+    @property
+    def label(self) -> str:
+        return f"{self.group_id}:{self.artifact_id}:{self.version}"
 
-def download_file(url, output_path):
+    @property
+    def output_dir(self) -> Path:
+        return OUTPUT_DIR / self.group_id / self.artifact_id / self.version
+
+    def maven_url(self, suffix: str) -> tuple[str, str]:
+        group_path = self.group_id.replace(".", "/")
+        filename = f"{self.artifact_id}-{self.version}{suffix}"
+        url = f"{MAVEN_CENTRAL}/{group_path}/{self.artifact_id}/{self.version}/{filename}"
+        return url, filename
+
+
+# ---------- basic file steps ----------
+
+def download_file(url: str, output_path: Path) -> bool:
     try:
-        r = requests.get(url, timeout=20)
-        if r.status_code == 200:
-            with open(output_path, "wb") as f:
-                f.write(r.content)
-            return True
-        else:
-            print(f"Failed ({r.status_code}): {url}")
+        response = requests.get(url, timeout=20)
+        if response.status_code != 200:
+            print(f"Failed ({response.status_code}): {url}")
             return False
-    except Exception as e:
-        print(f"Error: {url} -> {e}")
-        return False
-
-def extract_jar(jar_path, extract_to):
-    try:
-        with zipfile.ZipFile(jar_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_to)
+        output_path.write_bytes(response.content)
         return True
-    except Exception as e:
-        print(f"Extraction failed: {jar_path} -> {e}")
+    except requests.RequestException as exc:
+        print(f"Error: {url} -> {exc}")
         return False
 
-def pom_tag(name):
+
+def extract_jar(jar_path: Path, extract_to: Path) -> bool:
+    try:
+        with zipfile.ZipFile(jar_path) as jar:
+            jar.extractall(extract_to)
+        return True
+    except (OSError, zipfile.BadZipFile) as exc:
+        print(f"Extraction failed: {jar_path} -> {exc}")
+        return False
+
+
+def delete_library(lib_dir: Path, reason: str) -> None:
+    if lib_dir.exists():
+        shutil.rmtree(lib_dir)
+        print(f"Deleted {lib_dir}: {reason}")
+
+
+def is_prepared(lib_dir: Path) -> bool:
+    return (lib_dir / "pom.xml").exists() and (lib_dir / "src/main/java").exists()
+
+
+# ---------- POM helpers ----------
+
+def tag(name: str) -> str:
     return f"{{{POM_NS}}}{name}"
 
-def child(parent, name):
-    return parent.find(pom_tag(name))
 
-def children(parent, name):
-    return parent.findall(pom_tag(name))
+def child(parent: ET.Element, name: str) -> Optional[ET.Element]:
+    return parent.find(tag(name))
 
-def get_or_create_child(parent, name):
-    existing = child(parent, name)
-    if existing is not None:
-        return existing
 
-    created = ET.SubElement(parent, pom_tag(name))
-    return created
+def child_text(parent: ET.Element, name: str) -> Optional[str]:
+    elem = child(parent, name)
+    return elem.text.strip() if elem is not None and elem.text else None
 
-def inserted_comment():
-    return ET.Comment(" This element was inserted by download.py ")
 
-def dependency_matches(dependency, group_id, artifact_id):
-    group = child(dependency, "groupId")
-    artifact = child(dependency, "artifactId")
-    return group is not None and artifact is not None and group.text == group_id and artifact.text == artifact_id
+def ensure_child(parent: ET.Element, name: str) -> ET.Element:
+    elem = child(parent, name)
+    if elem is None:
+        elem = ET.SubElement(parent, tag(name))
+    return elem
 
-def find_dependency(dependencies, group_id, artifact_id):
-    for dependency in dependencies.findall(pom_tag("dependency")):
-        if dependency_matches(dependency, group_id, artifact_id):
-            return dependency
-    return None
 
-def has_dependency(dependencies, group_id, artifact_id):
-    return find_dependency(dependencies, group_id, artifact_id) is not None
+def set_text(parent: ET.Element, name: str, value: str) -> ET.Element:
+    elem = ensure_child(parent, name)
+    elem.text = value
+    return elem
 
-def add_or_update_dependency(dependencies, group_id, artifact_id, version, scope="test"):
-    dependency = find_dependency(dependencies, group_id, artifact_id)
-    if dependency is None:
-        dependencies.append(inserted_comment())
-        dependency = ET.SubElement(dependencies, pom_tag("dependency"))
-        ET.SubElement(dependency, pom_tag("groupId")).text = group_id
-        ET.SubElement(dependency, pom_tag("artifactId")).text = artifact_id
 
-    set_text_child(dependency, "version", version)
-    set_text_child(dependency, "scope", scope)
+def remove_children(parent: ET.Element, *names: str) -> None:
+    for name in names:
+        for elem in parent.findall(tag(name)):
+            parent.remove(elem)
 
-def add_dependency(dependencies, group_id, artifact_id, version, scope="test"):
-    add_or_update_dependency(dependencies, group_id, artifact_id, version, scope)
 
-def plugin_matches(plugin, group_id, artifact_id):
-    group = child(plugin, "groupId")
-    artifact = child(plugin, "artifactId")
-    if artifact is None or artifact.text != artifact_id:
+def parse_pom_block(xml: str) -> ET.Element:
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    return ET.fromstring(f'<snippet xmlns="{POM_NS}">{xml}</snippet>', parser=parser)[0]
+
+
+def coordinates(elem: ET.Element, default_group: Optional[str] = None) -> tuple[str, str]:
+    group_id = child_text(elem, "groupId") or default_group
+    artifact_id = child_text(elem, "artifactId")
+    if not group_id or not artifact_id:
+        raise ValueError("Maven block must have groupId and artifactId")
+    return group_id, artifact_id
+
+
+def same_coordinates(elem: ET.Element, group_id: str, artifact_id: str, default_group: Optional[str] = None) -> bool:
+    try:
+        elem_group, elem_artifact = coordinates(elem, default_group)
+    except ValueError:
         return False
-    if group is None or not group.text:
-        return group_id == "org.apache.maven.plugins"
-    return group.text == group_id
+    return elem_group == group_id and elem_artifact == artifact_id
 
-def find_plugin(plugins, group_id, artifact_id):
-    for plugin in plugins.findall(pom_tag("plugin")):
-        if plugin_matches(plugin, group_id, artifact_id):
-            return plugin
-    return None
 
-def has_plugin(plugins, group_id, artifact_id):
-    return find_plugin(plugins, group_id, artifact_id) is not None
+def replace_maven_block(parent: ET.Element, tag_name: str, xml: str, default_group: Optional[str] = None) -> None:
+    new_block = parse_pom_block(xml)
+    group_id, artifact_id = coordinates(new_block, default_group)
 
-def get_or_create_plugin(plugins, group_id, artifact_id):
-    plugin = find_plugin(plugins, group_id, artifact_id)
-    if plugin is None:
-        plugins.append(inserted_comment())
-        plugin = ET.SubElement(plugins, pom_tag("plugin"))
-    set_text_child(plugin, "groupId", group_id)
-    set_text_child(plugin, "artifactId", artifact_id)
-    return plugin
+    for existing in parent.findall(tag(tag_name)):
+        if same_coordinates(existing, group_id, artifact_id, default_group):
+            parent.remove(existing)
+            break
 
-def remove_children(parent, name):
-    for elem in children(parent, name):
-        parent.remove(elem)
+    parent.append(new_block)
+
+
+# ---------- POM normalization ----------
 
 def normalize_java_version(value: str) -> str:
     value = value.strip()
-
     if value.startswith("${") and value.endswith("}"):
         return DEFAULT_JAVA_VERSION
-
     if value.startswith("1."):
         value = value.split(".", 1)[1]
 
     try:
-        version_num = int(value)
-        if version_num < MIN_JAVA_VERSION:
-            return DEFAULT_JAVA_VERSION
-        return str(version_num)
+        version = int(value)
     except ValueError:
         return DEFAULT_JAVA_VERSION
 
-def child_text(parent, name):
-    elem = child(parent, name)
-    if elem is None or elem.text is None:
-        return None
-    return elem.text.strip()
+    return str(version) if version >= MIN_JAVA_VERSION else DEFAULT_JAVA_VERSION
 
-def detect_java_version(root):
+
+def plugin_matches(plugin: ET.Element, artifact_id: str, group_id: str = "org.apache.maven.plugins") -> bool:
+    return same_coordinates(plugin, group_id, artifact_id, default_group="org.apache.maven.plugins")
+
+
+def detect_java_version(root: ET.Element) -> Optional[str]:
     properties = child(root, "properties")
     if properties is not None:
         for name in (
@@ -169,305 +178,243 @@ def detect_java_version(root):
             "maven.compile.source",
             "maven.compile.target",
         ):
-            value = child_text(properties, name)
-            if value:
+            if value := child_text(properties, name):
                 return value
 
-    for plugin in root.iter(pom_tag("plugin")):
-        if not plugin_matches(plugin, "org.apache.maven.plugins", "maven-compiler-plugin"):
+    for plugin in root.iter(tag("plugin")):
+        if not plugin_matches(plugin, "maven-compiler-plugin"):
             continue
-
         configuration = child(plugin, "configuration")
         if configuration is None:
             continue
-
         for name in ("release", "source", "target"):
-            value = child_text(configuration, name)
-            if value:
+            if value := child_text(configuration, name):
                 return value
 
     return None
 
-def set_plugin_version(plugin, version):
-    set_text_child(plugin, "version", version)
 
-def configure_compiler_plugin(plugins, java_version):
-    plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-compiler-plugin")
-    set_plugin_version(plugin, "3.11.0")
-    configuration = get_or_create_child(plugin, "configuration")
-    remove_children(configuration, "source")
-    remove_children(configuration, "target")
-    set_text_child(configuration, "release", java_version)
-    # set_text_child(configuration, "encoding", "UTF-8")
+def configure_compiler_plugin(plugins: ET.Element, java_version: str) -> None:
+    plugin = None
+    for candidate in plugins.findall(tag("plugin")):
+        if plugin_matches(candidate, "maven-compiler-plugin"):
+            plugin = candidate
+            break
 
-def configure_existing_compiler_plugins(root, java_version):
-    for plugin in root.iter(pom_tag("plugin")):
-        if plugin_matches(plugin, "org.apache.maven.plugins", "maven-compiler-plugin"):
-            set_plugin_version(plugin, "3.11.0")
-            configuration = get_or_create_child(plugin, "configuration")
-            remove_children(configuration, "source")
-            remove_children(configuration, "target")
-            set_text_child(configuration, "release", java_version)
-            # set_text_child(configuration, "encoding", "UTF-8")
+    if plugin is None:
+        plugin = ET.SubElement(plugins, tag("plugin"))
+        set_text(plugin, "groupId", "org.apache.maven.plugins")
+        set_text(plugin, "artifactId", "maven-compiler-plugin")
 
-def configure_surefire_plugin(plugins):
-    plugin = get_or_create_plugin(plugins, "org.apache.maven.plugins", "maven-surefire-plugin")
-    set_plugin_version(plugin, "3.2.5")
-    remove_children(plugin, "configuration")
-    remove_children(plugin, "dependencies")
-
-    configuration = ET.SubElement(plugin, pom_tag("configuration"))
-    ET.SubElement(configuration, pom_tag("argLine")).text = "@{jacoco.argLine}"
-    includes = ET.SubElement(configuration, pom_tag("includes"))
-    ET.SubElement(includes, pom_tag("include")).text = "**/*Test.java"
-
-    dependencies = ET.SubElement(plugin, pom_tag("dependencies"))
-    dependency = ET.SubElement(dependencies, pom_tag("dependency"))
-    ET.SubElement(dependency, pom_tag("groupId")).text = "org.apache.maven.surefire"
-    ET.SubElement(dependency, pom_tag("artifactId")).text = "surefire-junit4"
-    ET.SubElement(dependency, pom_tag("version")).text = "3.2.5"
-
-def configure_jacoco_plugin(plugins):
-    plugin = get_or_create_plugin(plugins, "org.jacoco", "jacoco-maven-plugin")
-    set_plugin_version(plugin, "0.8.12")
-    remove_children(plugin, "configuration")
-    remove_children(plugin, "executions")
-
-    configuration = ET.SubElement(plugin, pom_tag("configuration"))
-    ET.SubElement(configuration, pom_tag("propertyName")).text = "jacoco.argLine"
-    excludes = ET.SubElement(configuration, pom_tag("excludes"))
-    ET.SubElement(excludes, pom_tag("exclude")).text = "META-INF/versions/**"
-
-    executions = ET.SubElement(plugin, pom_tag("executions"))
-    prepare_agent = ET.SubElement(executions, pom_tag("execution"))
-    ET.SubElement(prepare_agent, pom_tag("id")).text = "prepare-agent"
-    goals = ET.SubElement(prepare_agent, pom_tag("goals"))
-    ET.SubElement(goals, pom_tag("goal")).text = "prepare-agent"
-
-    report = ET.SubElement(executions, pom_tag("execution"))
-    ET.SubElement(report, pom_tag("id")).text = "report"
-    ET.SubElement(report, pom_tag("phase")).text = "verify"
-    report_goals = ET.SubElement(report, pom_tag("goals"))
-    ET.SubElement(report_goals, pom_tag("goal")).text = "report"
+    set_text(plugin, "version", COMPILER_PLUGIN_VERSION)
+    configuration = ensure_child(plugin, "configuration")
+    remove_children(configuration, "source", "target")
+    set_text(configuration, "release", java_version)
 
 
-def normalize_generated_test_pom(root):
+def normalize_test_pom(root: ET.Element) -> None:
     detected_java = detect_java_version(root)
     java_version = normalize_java_version(detected_java) if detected_java else DEFAULT_JAVA_VERSION
 
-    properties = get_or_create_child(root, "properties")
-    # set_text_child(properties, "project.build.sourceEncoding", "UTF-8")
-    set_text_child(properties, "jacoco.argLine", "")
+    properties = ensure_child(root, "properties")
+    set_text(properties, "jacoco.argLine", "")
+    set_text(properties, "maven.compiler.release", java_version)
+    remove_children(
+        properties,
+        "maven.compiler.source",
+        "maven.compiler.target",
+        "maven.compile.source",
+        "maven.compile.target",
+    )
 
-    # Prevent old libraries from using source/target values unsupported by modern JDKs.
-    set_text_child(properties, "maven.compiler.release", java_version)
-    remove_children(properties, "maven.compiler.source")
-    remove_children(properties, "maven.compiler.target")
-    remove_children(properties, "maven.compile.source")
-    remove_children(properties, "maven.compile.target")
+    dependencies = ensure_child(root, "dependencies")
+    for dependency_xml in FIXED_DEPENDENCIES:
+        replace_maven_block(dependencies, "dependency", dependency_xml)
 
-    dependencies = get_or_create_child(root, "dependencies")
-    add_or_update_dependency(dependencies, "junit", "junit", "4.13.2")
-    add_or_update_dependency(dependencies, "org.mockito", "mockito-core", "4.11.0")
+    build = ensure_child(root, "build")
+    set_text(build, "sourceDirectory", "src/main/java")
+    set_text(build, "testSourceDirectory", "src/test/java")
 
-    build = get_or_create_child(root, "build")
-    set_text_child(build, "sourceDirectory", "src/main/java")
-    set_text_child(build, "testSourceDirectory", "src/test/java")
-
-    plugins = get_or_create_child(build, "plugins")
+    plugins = ensure_child(build, "plugins")
     configure_compiler_plugin(plugins, java_version)
-    configure_surefire_plugin(plugins)
-    configure_jacoco_plugin(plugins)
-    configure_existing_compiler_plugins(root, java_version)
+    for plugin_xml in FIXED_PLUGINS:
+        replace_maven_block(plugins, "plugin", plugin_xml, default_group="org.apache.maven.plugins")
 
-def add_jacoco_plugin(plugins):
-    configure_jacoco_plugin(plugins)
-
-def set_text_child(parent, name, text):
-    elem = get_or_create_child(parent, name)
-    elem.text = text
-    return elem
+    for plugin in root.iter(tag("plugin")):
+        if plugin_matches(plugin, "maven-compiler-plugin"):
+            configuration = ensure_child(plugin, "configuration")
+            remove_children(configuration, "source", "target")
+            set_text(plugin, "version", COMPILER_PLUGIN_VERSION)
+            set_text(configuration, "release", java_version)
 
 
-def create_minimal_pom(target_pom, group_id, artifact_id, version):
-    project = ET.Element(pom_tag("project"))
+def write_pom(tree: ET.ElementTree, path: Path) -> None:
+    ET.indent(tree, space="    ")
+    tree.write(path, encoding="utf-8", xml_declaration=True)
 
+
+def create_minimal_pom(path: Path, artifact: MavenArtifact) -> None:
+    project = ET.Element(tag("project"))
     project.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
     project.set(
         "xsi:schemaLocation",
-        "http://maven.apache.org/POM/4.0.0 "
-        "http://maven.apache.org/xsd/maven-4.0.0.xsd"
+        "http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd",
     )
 
-    ET.SubElement(project, pom_tag("modelVersion")).text = "4.0.0"
-    ET.SubElement(project, pom_tag("groupId")).text = group_id
-    ET.SubElement(project, pom_tag("artifactId")).text = artifact_id
-    ET.SubElement(project, pom_tag("version")).text = version
-    ET.SubElement(project, pom_tag("packaging")).text = "jar"
+    for name, value in (
+        ("modelVersion", "4.0.0"),
+        ("groupId", artifact.group_id),
+        ("artifactId", artifact.artifact_id),
+        ("version", artifact.version),
+        ("packaging", "jar"),
+    ):
+        set_text(project, name, value)
 
-    normalize_generated_test_pom(project)
-
-    tree = ET.ElementTree(project)
-    ET.indent(tree, space="    ")
-    tree.write(target_pom, encoding="utf-8", xml_declaration=True)
+    normalize_test_pom(project)
+    write_pom(ET.ElementTree(project), path)
 
 
-def prepare_pom(base_dir, group_id, artifact_id, version):
+def prepare_pom(base_dir: Path, artifact: MavenArtifact) -> None:
     target_pom = base_dir / "pom.xml"
+    pom_url, _ = artifact.maven_url(".pom")
 
-    if not download_pom_from_maven_central(target_pom, group_id, artifact_id, version):
+    if not download_file(pom_url, target_pom):
         print(f"Could not download pom.xml from Maven Central. Creating minimal pom.xml: {target_pom}")
-        create_minimal_pom(target_pom, group_id, artifact_id, version)
+        create_minimal_pom(target_pom, artifact)
         return
 
     tree = ET.parse(target_pom)
     root = tree.getroot()
+    has_parent = child(root, "parent") is not None
 
-    # Ensure basic Maven coordinates exist
-    set_text_child(root, "modelVersion", "4.0.0")
-
-    if child(root, "groupId") is None and child(root, "parent") is None:
-        set_text_child(root, "groupId", group_id)
-
+    set_text(root, "modelVersion", "4.0.0")
+    if child(root, "groupId") is None and not has_parent:
+        set_text(root, "groupId", artifact.group_id)
     if child(root, "artifactId") is None:
-        set_text_child(root, "artifactId", artifact_id)
+        set_text(root, "artifactId", artifact.artifact_id)
+    if child(root, "version") is None and not has_parent:
+        set_text(root, "version", artifact.version)
+    if child(root, "packaging") is None:
+        set_text(root, "packaging", "jar")
 
-    if child(root, "version") is None and child(root, "parent") is None:
-        set_text_child(root, "version", version)
+    normalize_test_pom(root)
+    write_pom(tree, target_pom)
 
-    packaging = child(root, "packaging")
-    if packaging is None:
-        set_text_child(root, "packaging", "jar")
 
-    normalize_generated_test_pom(root)
+# ---------- named pipeline steps ----------
 
-    ET.indent(tree, space="    ")
-    tree.write(target_pom, encoding="utf-8", xml_declaration=True)
+def step_download_sources(artifact: MavenArtifact, lib_dir: Path) -> Optional[Path]:
+    url, filename = artifact.maven_url("-sources.jar")
+    jar_path = lib_dir / filename
+    if not download_file(url, jar_path):
+        delete_library(lib_dir, "source jar download failed")
+        return None
+    print(f"Downloaded: {artifact.label}")
+    return jar_path
 
-def create_maven_project(base_dir, group_id, artifact_id, version):
-    src_main = base_dir / "src/main/java"
-    src_main.mkdir(parents=True, exist_ok=True)
 
-    # Move extracted sources into Maven structure
-    extracted_src = base_dir / "extracted"
-    if extracted_src.exists():
-        for file in extracted_src.rglob("*.java"):
-            target = src_main / file.relative_to(extracted_src)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(file, target)
+def step_extract_sources(jar_path: Path, lib_dir: Path) -> Optional[Path]:
+    extract_dir = lib_dir / "extracted"
+    extract_dir.mkdir(exist_ok=True)
 
-    prepare_pom(base_dir, group_id, artifact_id, version)
+    if not extract_jar(jar_path, extract_dir):
+        delete_library(lib_dir, "source jar extraction failed")
+        return None
+    if not any(extract_dir.rglob("*.java")):
+        delete_library(lib_dir, "source jar contains no Java files")
+        return None
 
-    if extracted_src.exists():
-        shutil.rmtree(extracted_src)
+    jar_path.unlink(missing_ok=True)
+    return extract_dir
+
+
+def step_create_maven_project(extract_dir: Path, lib_dir: Path, artifact: MavenArtifact) -> None:
+    source_dir = lib_dir / "src/main/java"
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    for source_file in extract_dir.rglob("*.java"):
+        target = source_dir / source_file.relative_to(extract_dir)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(source_file, target)
+
+    prepare_pom(lib_dir, artifact)
+    shutil.rmtree(extract_dir)
+
 
 def compile_library(base_dir: Path) -> tuple[bool, str]:
-    command = [
-        "mvn.cmd",
-        "-q",
-        "test-compile",
-        "-Drat.skip=true",
-        "-Danimal.sniffer.skip=true",
-    ]
     result = subprocess.run(
-        command,
+        [
+            "mvn.cmd",
+            "-q",
+            "test-compile",
+            "-Drat.skip=true",
+            "-Danimal.sniffer.skip=true",
+        ],
         cwd=base_dir,
         capture_output=True,
         text=True,
         timeout=300,
     )
-    output = result.stdout + "\n" + result.stderr
-    return result.returncode == 0, output
+    return result.returncode == 0, result.stdout + "\n" + result.stderr
 
-def delete_library(lib_dir: Path, reason: str) -> None:
-    if lib_dir.exists():
-        shutil.rmtree(lib_dir)
-        print(f"Deleted {lib_dir}: {reason}")
 
-def delete_downloaded_jar(jar_path: Path) -> None:
-    if jar_path.exists():
-        jar_path.unlink()
+def step_compile_with_fallback(lib_dir: Path, artifact: MavenArtifact) -> bool:
+    success, output = compile_library(lib_dir)
+    if success:
+        print(f"Compile success: {artifact.label}")
+        return True
 
-def library_already_prepared(lib_dir: Path) -> bool:
-    return (
-        (lib_dir / "pom.xml").exists()
-        and (lib_dir / "src/main/java").exists()
-    )
+    print(f"Compile failed: {artifact.label}")
+    print(output.strip()[-4000:])
 
-# =========================
-# MAIN
-# =========================
-def main():
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    print(f"Retrying with minimal pom.xml: {artifact.label}")
+    create_minimal_pom(lib_dir / "pom.xml", artifact)
 
-    with open(CSV_FILE, newline='', encoding="utf-8") as f:
-        reader = csv.DictReader(f)
+    success, output = compile_library(lib_dir)
+    if success:
+        print(f"Compile success with minimal pom.xml: {artifact.label}")
+        return True
+
+    print(f"Compile failed with minimal pom.xml: {artifact.label}")
+    print(output.strip()[-4000:])
+    delete_library(lib_dir, "library does not compile")
+    return False
+
+
+def prepare_library(artifact: MavenArtifact) -> bool:
+    print(f"\nProcessing: {artifact.label}")
+
+    lib_dir = artifact.output_dir
+    lib_dir.mkdir(parents=True, exist_ok=True)
+
+    if is_prepared(lib_dir):
+        print(f"Already prepared: {artifact.label}")
+        return False
+
+    jar_path = step_download_sources(artifact, lib_dir)
+    if jar_path is None:
+        return False
+
+    extract_dir = step_extract_sources(jar_path, lib_dir)
+    if extract_dir is None:
+        return False
+
+    step_create_maven_project(extract_dir, lib_dir, artifact)
+    return step_compile_with_fallback(lib_dir, artifact)
+
+
+def read_artifacts(csv_file: Path) -> list[MavenArtifact]:
+    with csv_file.open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
         print(reader.fieldnames)
+        return [MavenArtifact(row["group_id"], row["artifact_id"], row["version"]) for row in reader]
 
-        for row in reader:
-            group_id = row["group_id"]
-            artifact_id = row["artifact_id"]
-            version = row["version"]
 
-            print(f"\nProcessing: {group_id}:{artifact_id}:{version}")
+def main() -> None:
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    compiled_count = sum(1 for artifact in read_artifacts(CSV_FILE) if prepare_library(artifact))
+    print(f"\nAll done! Successfully compiled {compiled_count} libraries.")
 
-            url, filename = build_source_url(group_id, artifact_id, version)
-
-            lib_dir = OUTPUT_DIR / group_id / artifact_id / version
-            lib_dir.mkdir(parents=True, exist_ok=True)
-
-            if library_already_prepared(lib_dir):
-                print(f"Already prepared: {group_id}:{artifact_id}:{version}")
-                continue
-
-            jar_path = lib_dir / filename
-
-            success = download_file(url, jar_path)
-            if not success:
-                delete_library(lib_dir, "source jar download failed")
-                continue
-
-            print(f"Downloaded: {group_id}:{artifact_id}:{version}")
-
-            extract_dir = lib_dir / "extracted"
-            extract_dir.mkdir(exist_ok=True)
-
-            ok = extract_jar(jar_path, extract_dir)
-            if not ok:
-                delete_library(lib_dir, "source jar extraction failed")
-                continue
-
-            java_files = list(extract_dir.rglob("*.java"))
-            if not java_files:
-                delete_library(lib_dir, "source jar contains no Java files")
-                continue
-
-            delete_downloaded_jar(jar_path)
-
-            create_maven_project(lib_dir, group_id, artifact_id, version)
-
-            success, output = compile_library(lib_dir)
-            count = 0
-            if success:
-                print(f"Compile success: {group_id}:{artifact_id}:{version}")
-                count += 1
-            else:
-                print(f"Compile failed: {group_id}:{artifact_id}:{version}")
-                print(output.strip()[-4000:])
-
-                print(f"Retrying with minimal pom.xml: {group_id}:{artifact_id}:{version}")
-                create_minimal_pom(lib_dir / "pom.xml", group_id, artifact_id, version)
-
-                success, output = compile_library(lib_dir)
-                if success:
-                    print(f"Compile success with minimal pom.xml: {group_id}:{artifact_id}:{version}")
-                    count += 1
-                else:
-                    print(f"Compile failed with minimal pom.xml: {group_id}:{artifact_id}:{version}")
-                    print(output.strip()[-4000:])
-                    delete_library(lib_dir, "library does not compile")
-
-    print(f"\nAll done! Successfully compiled {count} libraries.")
 
 if __name__ == "__main__":
     main()
