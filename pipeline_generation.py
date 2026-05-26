@@ -1,23 +1,13 @@
-from llm.config import OLLAMA_MODEL, LLM_BACKEND
 from llm.main import (
-    LLMCallMetrics,
-    generate_llm_response_ollama,
-    generate_llm_response_openrouter,
+    generate_llm_response,
+)
+from llm.prompts import (
     get_generation_prompt,
     get_repair_prompt,
 )
 from pipeline_metrics import LibraryRuntimeMetrics
 from postprocess import normalize_test_code
 from validation import ValidationResult
-
-
-def generate_llm_response(prompt: str) -> tuple[str, LLMCallMetrics]:
-    """Route LLM calls through the backend selected in the LLM config."""
-    if LLM_BACKEND == "openrouter":
-        return generate_llm_response_openrouter(prompt)
-    if LLM_BACKEND == "ollama":
-        return generate_llm_response_ollama(prompt, model=OLLAMA_MODEL)
-    raise ValueError(f"Unsupported LLM backend: {LLM_BACKEND!r}")
 
 
 def generate_initial_test(
