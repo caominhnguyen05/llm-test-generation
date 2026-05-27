@@ -36,13 +36,14 @@ def project_relative(project_path: Path, path: Path) -> str:
 
 def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
     project_path = config.library_path
-    print(f"Running JaCoCo for {project_path.name}...", file=sys.stderr)
+    print(f"Running JaCoCo for {config.library}...")
+
     test_result = subprocess.run(
         [
             "mvn.cmd",
             "-q",
             "clean",
-            "org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent",
+            f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:prepare-agent",
             "test",
             "-Dmaven.test.failure.ignore=true",
         ],
@@ -54,40 +55,43 @@ def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
 
     if test_result.returncode != 0:
         output = test_result.stdout + "\n" + test_result.stderr
-        print(f"JaCoCo test run failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
+        print(f"JaCoCo test run failed for {config.library}:\n{output.strip()[-3000:]}")
         return False
 
     exec_file = project_path / "target/jacoco.exec"
-    classfiles = config.library_path / "artifacts"/ f"{config.artifact_id}-{config.version}.jar"
+    classfiles = project_path / "artifacts" / f"{config.artifact_id}-{config.version}.jar"
     sourcefiles = project_path / "prompt_sources"
     report_dir = project_path / "target/site/jacoco"
+    xml_report = report_dir / "jacoco.xml"
     jacoco_cli_jar = download_jacoco_cli()
 
     missing = [
         str(path)
         for path in (exec_file, classfiles, sourcefiles, jacoco_cli_jar)
-        if path is None or not path.exists()
+        if not path.exists()
     ]
+
     if missing:
         print(f"Cannot run JaCoCo CLI; missing: {', '.join(missing)}", file=sys.stderr)
         return False
 
     report_dir.mkdir(parents=True, exist_ok=True)
+
     report_result = subprocess.run(
         [
             "java",
             "-jar",
             str(jacoco_cli_jar),
             "report",
-            project_relative(project_path, exec_file),
+            str(exec_file),
             "--classfiles",
-            project_relative(project_path, classfiles),
+            str(classfiles),
             "--sourcefiles",
-            project_relative(project_path, sourcefiles),
+            str(sourcefiles),
             "--xml",
-            project_relative(project_path, report_dir / "jacoco.xml"),
+            str(xml_report),
             "--html",
-            project_relative(project_path, report_dir),
+            str(report_dir),
         ],
         cwd=project_path,
         capture_output=True,
@@ -99,7 +103,7 @@ def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
         return True
 
     output = report_result.stdout + "\n" + report_result.stderr
-    print(f"JaCoCo CLI failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
+    print(f"JaCoCo CLI failed for {config.library}:\n{output.strip()[-3000:]}")
     return False
 
 

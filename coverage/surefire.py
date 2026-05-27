@@ -43,7 +43,12 @@ def read_surefire_test_results(project_path: Path) -> tuple[TestCounts, dict[str
                 failing_tests.setdefault(classname, set()).add(test_name)
 
     passed = total - failed_assertions - runtime_errors - skipped
-    return TestCounts(total, passed, failed_assertions, runtime_errors), failing_tests
+    return TestCounts(
+        total=total,
+        passed=passed,
+        failed_assertions=failed_assertions,
+        runtime_errors=runtime_errors,
+    ), failing_tests
 
 
 def _java_method_name(testcase_name: str) -> str:
