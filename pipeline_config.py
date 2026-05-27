@@ -3,12 +3,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
-
 
 @dataclass(frozen=True)
 class PipelineConfig:
-    library: str
+    library: str | None
     attempts: int
     mode: str
     llm_backend: str
@@ -21,37 +19,29 @@ class PipelineConfig:
     def libraries_root(self) -> Path:
         if self.mode == "final":
             return REPO_ROOT / f"libraries_final_{self.llm_backend}"
-        return REPO_ROOT / f"libraries_repair_{self.attempts}_{self.llm_backend}"
+        return REPO_ROOT / f"libraries_repair_{self.attempts}"
     
     @property
     def results_root(self) -> Path:
-        if self.mode == "repair":
-            return REPO_ROOT / "results" / "repair"
-        return REPO_ROOT / "results" / "final"
+        if self.mode == "final":
+            return REPO_ROOT / "results" / "final" / self.llm_backend
+        return REPO_ROOT / "results" / "repair" / f"repair_{self.attempts}"
     
     @property
     def coverage_csv(self) -> Path:
-        if self.mode == "final":
-            return self.results_root / f"{self.llm_backend}" / "coverage.csv"
-        return self.results_root / f"repair_{self.attempts}" / "coverage.csv"
+        return self.results_root / "coverage.csv"
 
     @property
     def cost_csv(self) -> Path:
-        if self.mode == "final":
-            return self.results_root / f"{self.llm_backend}" / "cost.csv"
-        return self.results_root / f"repair_{self.attempts}" / "cost.csv"
+        return self.results_root / "cost.csv"
 
     @property
     def compile_failures_csv(self) -> Path:
-        if self.mode == "final":
-            return self.results_root / f"{self.llm_backend}" / "compile_failures.csv"
-        return self.results_root / f"repair_{self.attempts}" / "compile_failures.csv"
-    
+        return self.results_root / "compile_failures.csv"
+
     @property
     def compile_failure_summary_csv(self) -> Path:
-        if self.mode == "final":
-            return self.results_root / f"{self.llm_backend}" / "compile_failures_summary.csv"
-        return self.results_root / f"repair_{self.attempts}" / "compile_failures_summary.csv"
+        return self.results_root / "compile_failures_summary.csv"
 
     @property
     def group_id(self) -> str:
@@ -93,7 +83,8 @@ def parse_args() -> PipelineConfig:
 
     parser.add_argument(
         "--library",
-        default=DEFAULT_TARGET_LIBRARY,
+        type=maven_coordinate,
+        default=None,
         help=(
             "Maven coordinates in the form groupId:artifactId:version. "
             "Example: commons-cli:commons-cli:1.2"
@@ -123,6 +114,12 @@ def parse_args() -> PipelineConfig:
         llm_backend=args.llm_backend,
     )
 
+def maven_coordinate(value: str) -> str:
+    try:
+        parse_coordinate(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc))
+    return value
 
 def parse_coordinate(library: str) -> tuple[str, str, str]:
     parts = library.split(":")
