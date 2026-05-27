@@ -19,7 +19,6 @@ COMPILE_FAILURE_SUMMARY_FIELDNAMES = [
     "library",
     "category",
     "compile_failures",
-    "percentage",
 ]
 
 
@@ -92,14 +91,12 @@ def write_compile_failure_summary(config: PipelineConfig) -> None:
         writer = csv.DictWriter(file, fieldnames=COMPILE_FAILURE_SUMMARY_FIELDNAMES)
         writer.writeheader()
         for library, category_counts in sorted(library_counts.items()):
-            total_failures = sum(category_counts.values())
             for category, count in sorted(category_counts.items()):
                 writer.writerow(
                     {
                         "library": library,
                         "category": category,
                         "compile_failures": str(count),
-                        "percentage": f"{(count / total_failures) * 100:.2f}",
                     }
                 )
     print(f"Compile failure summary written to {config.compile_failure_summary_csv}")
