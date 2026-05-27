@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
-from coverage.main import run_coverage_after_ignoring_failures
+from coverage.coverage_pipeline import run_coverage_after_ignoring_failures
 from coverage.jacoco import build_coverage_row
-from llm.main import LLMCallMetrics
+from llm.client import LLMCallMetrics
 from pipeline_config import PipelineConfig
 
 
