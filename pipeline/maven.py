@@ -70,25 +70,16 @@ def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         "-q",
         "test",
         f"-Dtest={test_class}",
-        "-Dsurefire.timeout=100",
-        "-Dsurefire.exitTimeout=10",
-        "-Dsurefire.forkedProcessTimeoutInSeconds=100",
     ]
 
-    try:
-        with only_test_class_visible(library_path, test_class):
-            result = subprocess.run(
-                command,
-                cwd=library_path,
-                capture_output=True,
-                text=True,
-                timeout=MAVEN_TIMEOUT_SECONDS,
-            )
-
-        output = result.stdout + "\n" + result.stderr
-        return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]
-
-    except subprocess.TimeoutExpired as exc:
-        return False, (
-            f"Maven test execution timed out after {MAVEN_TIMEOUT_SECONDS} seconds.\n"
+    with only_test_class_visible(library_path, test_class):
+        result = subprocess.run(
+            command,
+            cwd=library_path,
+            capture_output=True,
+            text=True,
+            timeout=MAVEN_TIMEOUT_SECONDS,
         )
+
+    output = result.stdout + "\n" + result.stderr
+    return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]
