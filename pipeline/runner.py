@@ -15,7 +15,6 @@ from pipeline.metrics import (
     CostMetrics,
     append_library_coverage,
     append_library_runtime_metrics,
-    append_zero_coverage_row,
 )
 from pipeline.preprocess import extract_package_and_class, find_testable_sources, read_java_source
 from pipeline.validation import validate_compile, validate_structure, validate_test
@@ -130,10 +129,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     num_generated_tests = count_generated_tests(config)
 
     # 3. Record coverage
-    if num_generated_tests == 0:
-        append_zero_coverage_row(config, num_testable)
-    else:
-        append_library_coverage(config, num_testable, num_generated_tests)
+    append_library_coverage(config, num_testable, num_generated_tests)
 
     # 4. Write compile failure summary and runtime metrics
     write_compile_failure_summary(config)
