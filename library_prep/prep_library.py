@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from pipeline_config import PipelineConfig
+from pipeline.config import PipelineConfig
 from library_prep.config import FIXED_DEPENDENCIES, FIXED_PLUGINS
 
 
