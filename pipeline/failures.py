@@ -11,7 +11,6 @@ from pipeline.validation import ValidationResult
 COMPILE_FAILURE_FIELDNAMES = [
     "library",
     "source_file",
-    "test_class",
     "stage",
     "category",
     "message",
@@ -54,21 +53,21 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
 def record_compile_failure(
     config: PipelineConfig,
     source: Path,
-    test_class: str,
-    validation_result: ValidationResult,
+    result: ValidationResult,
 ) -> None:
-    """Append one compile/structure failure row before deleting the generated test."""
-    category = categorize_compile_error(validation_result.message, validation_result.stage)
-    row = {
-        "library": config.library,
-        "source_file": str(source),
-        "test_class": test_class,
-        "stage": validation_result.stage,
-        "category": category,
-        "message": compact_csv_message(validation_result.message),
-    }
-    append_csv_row(config.compile_failures_csv, COMPILE_FAILURE_FIELDNAMES, row)
-    print(f"Recorded {validation_result.stage} failure category for {test_class}: {category}")
+    category = categorize_compile_error(result.message, result.stage)
+
+    append_csv_row(
+        config.compile_failures_csv,
+        COMPILE_FAILURE_FIELDNAMES,
+        {
+            "library": config.library,
+            "source_file": str(source),
+            "stage": result.stage,
+            "category": category,
+            "message": compact_csv_message(result.message),
+        },
+    )
 
 
 def write_compile_failure_summary(config: PipelineConfig) -> None:
