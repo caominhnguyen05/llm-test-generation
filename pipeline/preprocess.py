@@ -4,11 +4,7 @@ from pathlib import Path
 from pipeline.config import PipelineConfig
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
-    if not config.source_folder.exists():
-        print(f"Error: source folder not found: {config.source_folder}")
-        return []
-
-    sources = []
+    keep = []
     skipped = []
 
     for path in sorted(config.source_folder.rglob("*.java")):
@@ -16,16 +12,16 @@ def find_testable_sources(config: PipelineConfig) -> list[Path]:
         relative_path = path.relative_to(config.source_folder)
 
         if decision.testable:
-            sources.append(relative_path)
+            keep.append(relative_path)
         else:
             skipped.append((relative_path, decision.reason))
 
-    if skipped:
+    if len(skipped) > 0:
         print(f"Preprocessing skipped {len(skipped)} likely non-testable source files:")
         for source, reason in skipped:
             print(f"- {source}: {reason}")
 
-    return sources
+    return keep
 
 
 def remove_leading_block_comment(source_code: str) -> str:
@@ -45,7 +41,7 @@ def extract_package_and_class(java_file: Path, source_root: Path) -> tuple[str, 
 
 
 @dataclass(frozen=True)
-class TestabilityDecision:
+class Decision:
     testable: bool
     reason: str = ""
 
@@ -116,32 +112,32 @@ def is_simple_enum(body: str) -> bool:
     return not has_method_body(body_without_constants)
 
 
-def check_testability(java_file: Path, source_root: Path) -> TestabilityDecision:
+def check_testability(java_file: Path, source_root: Path) -> Decision:
     """Decide whether a Java source file is worth testing."""
     if java_file.name in {"package-info.java", "module-info.java"}:
-        return TestabilityDecision(False, "metadata source file")
+        return Decision(False, "metadata source file")
 
     source_code = strip_comments_and_strings(read_java_source(java_file))
     _, class_name = extract_package_and_class(java_file, source_root)
     declaration = find_top_level_declaration(source_code, class_name)
     if declaration is None:
-        return TestabilityDecision(False, "no matching top-level Java type declaration")
+        return Decision(False, "no matching top-level Java type declaration")
 
     kind = declaration.group(1)
     body = body_after_declaration(source_code, declaration)
 
     if kind == "@interface":
-        return TestabilityDecision(False, "annotation type")
+        return Decision(False, "annotation type")
 
     if kind == "interface":
         has_default_or_static_method = bool(re.search(r"\b(default|static)\b[^;{}]*\([^;{}]*\)\s*\{", body))
         if not has_default_or_static_method:
-            return TestabilityDecision(False, "interface without executable default/static methods")
+            return Decision(False, "interface without executable default/static methods")
 
     if kind == "enum" and is_simple_enum(body):
-        return TestabilityDecision(False, "enum with constants only")
+        return Decision(False, "enum with constants only")
 
     if kind == "class" and is_constant_only_class(body, class_name):
-        return TestabilityDecision(False, "constant-only class")
+        return Decision(False, "constant-only class")
 
-    return TestabilityDecision(True)
+    return Decision(True)
