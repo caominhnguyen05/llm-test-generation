@@ -1,4 +1,3 @@
-import csv
 import shutil
 import subprocess
 import zipfile
@@ -8,11 +7,14 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from config import FIXED_DEPENDENCIES, FIXED_PLUGINS
+from pipeline_config import PipelineConfig
+
+try:
+    from .config import FIXED_DEPENDENCIES, FIXED_PLUGINS
+except ImportError:
+    from config import FIXED_DEPENDENCIES, FIXED_PLUGINS
 
 
-CSV_FILE = Path("csv_data/evosuite_results_one.csv")
-OUTPUT_DIR = Path("libraries_test")
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
 
 POM_NS = "http://maven.apache.org/POM/4.0.0"
@@ -31,10 +33,6 @@ class MavenArtifact:
     @property
     def label(self) -> str:
         return f"{self.group_id}:{self.artifact_id}:{self.version}"
-
-    @property
-    def output_dir(self) -> Path:
-        return OUTPUT_DIR / self.group_id / self.artifact_id / self.version
 
     @property
     def jar_name(self) -> str:
@@ -223,15 +221,16 @@ def compile_library(lib_dir: Path, artifact: MavenArtifact) -> bool:
     return False
 
 
-def prepare_library(artifact: MavenArtifact) -> bool:
+def prepare_library(config: PipelineConfig) -> bool:
+    artifact = MavenArtifact(config.group_id, config.artifact_id, config.version)
     print(f"\nProcessing: {artifact.label}")
 
-    lib_dir = artifact.output_dir
+    lib_dir = config.library_path
     lib_dir.mkdir(parents=True, exist_ok=True)
 
     if is_prepared(lib_dir, artifact):
         print(f"Already prepared: {artifact.label}")
-        return False
+        return True
 
     if not download_library_jars(artifact, lib_dir):
         return False
@@ -240,19 +239,3 @@ def prepare_library(artifact: MavenArtifact) -> bool:
 
     create_minimal_pom(lib_dir / "pom.xml", artifact)
     return compile_library(lib_dir, artifact)
-
-
-def read_artifacts(csv_file: Path) -> list[MavenArtifact]:
-    with csv_file.open(newline="", encoding="utf-8") as file:
-        reader = csv.DictReader(file)
-        return [MavenArtifact(row["group_id"], row["artifact_id"], row["version"]) for row in reader]
-
-
-def main() -> None:
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    compiled_count = sum(1 for artifact in read_artifacts(CSV_FILE) if prepare_library(artifact))
-    print(f"\nAll done! Successfully prepared {compiled_count} libraries.")
-
-
-if __name__ == "__main__":
-    main()
