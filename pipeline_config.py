@@ -3,10 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_LIBRARIES_ROOT = Path("libraries_test")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 
-MAX_REPAIR_ATTEMPTS = 2
 MAVEN_TIMEOUT_SECONDS = 100
 ERROR_CONTEXT_CHARS = 6000
 
@@ -20,8 +18,14 @@ COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summar
 class PipelineConfig:
     library: str
     attempts: int
-    libraries_root: Path = DEFAULT_LIBRARIES_ROOT
+    mode: str
     libraries_csv: Path | None = None
+
+    @property
+    def libraries_root(self) -> Path:
+        if self.mode == "final":
+            return Path("libraries_final")
+        return Path(f"libraries_repair_{self.attempts}")
 
     @property
     def group_id(self) -> str:
@@ -54,6 +58,14 @@ def parse_args() -> PipelineConfig:
     )
 
     parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["repair", "final"],
+        required=True,
+        help="Experiment mode: repair for repair-attempt comparison, final for final coverage experiment.",
+    )
+
+    parser.add_argument(
         "--library",
         default=DEFAULT_TARGET_LIBRARY,
         help=(
@@ -64,16 +76,9 @@ def parse_args() -> PipelineConfig:
 
     parser.add_argument(
         "--attempts",
-        type=int,
-        default=MAX_REPAIR_ATTEMPTS,
+        type=non_negative_int,
+        required=True,
         help="Maximum number of repair attempts per generated test.",
-    )
-
-    parser.add_argument(
-        "--libraries_root",
-        type=Path,
-        default=DEFAULT_LIBRARIES_ROOT,
-        help="Root folder containing all sample libraries.",
     )
 
     parser.add_argument(
@@ -88,8 +93,8 @@ def parse_args() -> PipelineConfig:
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
-        libraries_root=args.libraries_root,
         libraries_csv=args.libraries_csv,
+        mode=args.mode,
     )
 
 
@@ -112,3 +117,9 @@ def coordinate_to_path(libraries_root: Path, library: str) -> Path | None:
     except ValueError:
         return None
     return libraries_root / group_id / artifact_id / version
+
+def non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("--attempts must be at least 0.")
+    return parsed
