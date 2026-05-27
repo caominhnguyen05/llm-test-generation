@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from llm.config import (
     OLLAMA_MODEL,
-    SYSTEM_PROMPT,
+    OLLAMA_CONTEXT_SIZE,
     LLM_TIMEOUT_SECONDS,
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
@@ -13,6 +13,7 @@ from llm.config import (
     LLM_TEMPERATURE,
     LLM_SEED,
 )
+from llm.prompts import SYSTEM_PROMPT
 
 
 class LLMGenerationTimeoutError(TimeoutError):
@@ -99,7 +100,7 @@ def generate_llm_response_ollama(prompt: str) -> tuple[str, LLMCallMetrics]:
         options={
             "temperature": LLM_TEMPERATURE,
             "seed": LLM_SEED,
-            "num_ctx": 6000,
+            "num_ctx": OLLAMA_CONTEXT_SIZE,
         }
     )
 
