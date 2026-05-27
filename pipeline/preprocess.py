@@ -4,6 +4,7 @@ from pathlib import Path
 from pipeline.config import PipelineConfig
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
+    """Find Java classes that are worth testing in a library."""
     keep = []
     skipped = []
 
