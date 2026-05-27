@@ -34,7 +34,7 @@ def process_one_source(
 
     print(f"  Library: {config.library}")
 
-    test_code = generate_initial_test(source_code, package_name, class_name, metrics)
+    test_code = generate_initial_test(source_code, package_name, class_name, config.llm_backend, metrics)
     structure_result = validate_structure(test_code, class_name)
     if not structure_result.passed:
         return handle_structure_failure(config, source, test_file, test_class, structure_result.message)
@@ -56,7 +56,15 @@ def process_one_source(
         print(f"Error: {result.message}")
         print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
 
-        test_code = generate_repair_test(test_code, result, source_code, package_name, class_name, metrics)
+        test_code = generate_repair_test(
+            test_code,
+            result,
+            source_code,
+            package_name,
+            class_name,
+            config.llm_backend,
+            metrics,
+        )
         structure_result = validate_structure(test_code, class_name)
         if not structure_result.passed:
             return handle_structure_failure(config, source, test_file, test_class, structure_result.message)
