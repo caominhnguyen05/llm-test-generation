@@ -5,27 +5,49 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
 
-MAVEN_TIMEOUT_SECONDS = 100
-ERROR_CONTEXT_CHARS = 6000
-
-COVERAGE_CSV = REPO_ROOT / "results/coverage_ollama/coverage_repair.csv"
-COST_CSV = REPO_ROOT / "results/cost_ollama/runtime_repair.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/compile_failures.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summary.csv"
-
 
 @dataclass(frozen=True)
 class PipelineConfig:
     library: str
     attempts: int
     mode: str
-    libraries_csv: Path | None = None
+    llm_backend: str
 
     @property
     def libraries_root(self) -> Path:
         if self.mode == "final":
             return Path("libraries_final")
         return Path(f"libraries_repair_{self.attempts}")
+    
+    @property
+    def results_root(self) -> Path:
+        if self.mode == "repair":
+            return REPO_ROOT / "results" / "repair"
+        return REPO_ROOT / "results" / "final"
+    
+    @property
+    def coverage_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / "coverage" / f"coverage_{self.llm_backend}.csv"
+        return self.results_root / "coverage" / f"repair_{self.attempts}.csv"
+
+    @property
+    def cost_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / "cost" / f"cost_{self.llm_backend}.csv"
+        return self.results_root / "cost" / f"repair_{self.attempts}.csv"
+
+    @property
+    def compile_failures_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / "errors" / f"failures_{self.llm_backend}.csv"
+        return self.results_root / "errors" / f"failures_repair_{self.attempts}.csv"
+    
+    @property
+    def compile_failure_summary_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / "errors" / f"failure_summary_{self.llm_backend}.csv"
+        return self.results_root / "errors" / f"failure_summary_repair_{self.attempts}.csv"
 
     @property
     def group_id(self) -> str:
@@ -82,10 +104,10 @@ def parse_args() -> PipelineConfig:
     )
 
     parser.add_argument(
-        "--libraries_csv",
-        type=Path,
-        default=None,
-        help="CSV file containing group_id, artifact_id, and version columns.",
+        "--llm_backend",
+        choices=["ollama", "openrouter"],
+        default="ollama",
+        help="LLM backend to use: ollama or openrouter. Default is ollama.",
     )
 
     args = parser.parse_args()
@@ -93,8 +115,8 @@ def parse_args() -> PipelineConfig:
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
-        libraries_csv=args.libraries_csv,
         mode=args.mode,
+        llm_backend=args.llm_backend,
     )
 
 
