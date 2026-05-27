@@ -74,8 +74,15 @@ def minimal_pom_xml(config: PipelineConfig) -> str:
 """
 
 
-def create_minimal_pom(config: PipelineConfig) -> None:
-    (config.library_path / "pom.xml").write_text(
-        minimal_pom_xml(config),
-        encoding="utf-8",
-    )
+def create_minimal_pom(config: PipelineConfig) -> bool:
+    try:
+        config.library_path.mkdir(parents=True, exist_ok=True)
+        (config.library_path / "pom.xml").write_text(
+            minimal_pom_xml(config),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"Failed to create pom.xml for {config.library}: {exc}")
+        return False
+
+    return True
