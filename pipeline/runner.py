@@ -3,21 +3,21 @@ from pathlib import Path
 from shutil import rmtree
 
 from library_prep.prep_library import prepare_library
-from pipeline_config import PipelineConfig
-from pipeline_failures import record_compile_failure, write_compile_failure_summary
-from pipeline_files import (
+from pipeline.config import PipelineConfig
+from pipeline.failures import record_compile_failure, write_compile_failure_summary
+from pipeline.files import (
     delete_generated_test,
     save_test_code,
 )
-from pipeline_generation import generate_initial_test, generate_repair_test
-from pipeline_metrics import (
+from pipeline.generation import generate_initial_test, generate_repair_test
+from pipeline.metrics import (
     LibraryRuntimeMetrics,
     append_library_coverage,
     append_library_runtime_metrics,
     append_zero_coverage_row,
 )
-from preprocess import extract_package_and_class, find_testable_sources, read_java_source
-from validation import ValidationResult, validate_compile, validate_structure, validate_test
+from pipeline.preprocess import extract_package_and_class, find_testable_sources, read_java_source
+from pipeline.validation import ValidationResult, validate_compile, validate_structure, validate_test
 
 
 def process_one_source(

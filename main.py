@@ -2,8 +2,8 @@ import csv
 from dataclasses import replace
 from pathlib import Path
 
-from pipeline_config import parse_args
-from pipeline_runner import run_library_pipeline
+from pipeline.config import parse_args
+from pipeline.runner import run_library_pipeline
 
 def has_result_row(csv_path: Path, library: str) -> bool:
     if not csv_path.exists():

@@ -6,7 +6,7 @@ from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
 from coverage.coverage_pipeline import run_coverage_after_ignoring_failures
 from coverage.jacoco import build_coverage_row
 from llm.client import LLMCallMetrics
-from pipeline_config import PipelineConfig
+from pipeline.config import PipelineConfig
 
 
 COST_FIELDNAMES = [

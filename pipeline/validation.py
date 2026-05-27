@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from maven_helpers import compile_test, execute_test
-from pipeline_config import PipelineConfig
+from pipeline.maven import compile_test, execute_test
+from pipeline.config import PipelineConfig
 
 
 @dataclass(frozen=True)

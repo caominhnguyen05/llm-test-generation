@@ -3,9 +3,9 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from pipeline_config import PipelineConfig
-from pipeline_metrics import append_csv_row
-from validation import ValidationResult
+from pipeline.config import PipelineConfig
+from pipeline.metrics import append_csv_row
+from pipeline.validation import ValidationResult
 
 
 COMPILE_FAILURE_FIELDNAMES = [

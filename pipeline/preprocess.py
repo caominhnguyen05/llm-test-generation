@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from pipeline_config import PipelineConfig
+from pipeline.config import PipelineConfig
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
     if not config.source_folder.exists():

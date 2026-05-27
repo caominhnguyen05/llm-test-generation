@@ -5,9 +5,9 @@ from llm.prompts import (
     get_generation_prompt,
     get_repair_prompt,
 )
-from pipeline_metrics import LibraryRuntimeMetrics
-from postprocess import normalize_test_code
-from validation import ValidationResult
+from pipeline.metrics import LibraryRuntimeMetrics
+from pipeline.postprocess import normalize_test_code
+from pipeline.validation import ValidationResult
 
 
 def generate_initial_test(
