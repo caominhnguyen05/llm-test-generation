@@ -78,7 +78,6 @@ def extract_source_jar(config: PipelineConfig) -> bool:
             jar.extractall(prompt_sources)
 
         if not any(prompt_sources.rglob("*.java")):
-            delete_library(config, "source jar contains no Java files")
             return False
 
         shutil.rmtree(prompt_sources / "META-INF", ignore_errors=True)
@@ -107,7 +106,6 @@ def compile_library(config: PipelineConfig) -> bool:
     print(f"Compile failed: {config.library}")
     print(output.strip()[-4000:])
 
-    delete_library(config, "library failed to compile")
     return False
 
 
@@ -119,10 +117,10 @@ def prepare_library(config: PipelineConfig) -> bool:
         return True
 
     steps = [
-        ("Downloading artifacts", download_library_jars),
-        ("Extracting source jar", extract_source_jar),
-        ("Creating pom.xml", create_minimal_pom),
-        ("Compiling library", compile_library),
+        ("- Downloading artifacts", download_library_jars),
+        ("- Extracting source jar", extract_source_jar),
+        ("- Creating minimal pom.xml", create_minimal_pom),
+        ("- Compiling library", compile_library),
     ]
 
     for message, step in steps:
