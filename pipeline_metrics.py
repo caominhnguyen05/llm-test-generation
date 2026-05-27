@@ -6,7 +6,7 @@ from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
 from coverage.main import run_coverage_after_ignoring_failures
 from coverage.jacoco import build_coverage_row
 from llm.main import LLMCallMetrics
-from pipeline_config import COVERAGE_CSV, COST_CSV, PipelineConfig
+from pipeline_config import PipelineConfig
 
 
 COST_FIELDNAMES = [
@@ -75,8 +75,8 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
         generated_test_classes=generated_test_classes,
         test_counts=prep_result.test_counts,
     )
-    append_csv_row(COVERAGE_CSV, COVERAGE_FIELDNAMES, row)
-    print(f"Coverage row written to {COVERAGE_CSV}")
+    append_csv_row(config.coverage_csv, COVERAGE_FIELDNAMES, row)
+    print(f"Coverage row written to {config.coverage_csv}")
 
 
 def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int) -> None:
@@ -101,8 +101,8 @@ def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int)
         "runtime_error_rate": "0",
     }
 
-    append_csv_row(COVERAGE_CSV, COVERAGE_FIELDNAMES, row)
-    print(f"Zero coverage row written to {COVERAGE_CSV}")
+    append_csv_row(config.coverage_csv, COVERAGE_FIELDNAMES, row)
+    print(f"Zero coverage row written to {config.coverage_csv}")
 
 
 def append_library_runtime_metrics(
@@ -121,5 +121,5 @@ def append_library_runtime_metrics(
         "number_of_repair_attempts": str(config.attempts),
     }
 
-    append_csv_row(COST_CSV, COST_FIELDNAMES, row)
-    print(f"Cost metrics row written to {COST_CSV}")
+    append_csv_row(config.cost_csv, COST_FIELDNAMES, row)
+    print(f"Cost metrics row written to {config.cost_csv}")

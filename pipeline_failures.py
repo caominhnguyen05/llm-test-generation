@@ -3,7 +3,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from pipeline_config import COMPILE_FAILURES_CSV, COMPILE_FAILURE_SUMMARY_CSV, PipelineConfig
+from pipeline_config import PipelineConfig
 from pipeline_metrics import append_csv_row
 from validation import ValidationResult
 
@@ -67,17 +67,17 @@ def record_compile_failure(
         "category": category,
         "message": compact_csv_message(validation_result.message),
     }
-    append_csv_row(COMPILE_FAILURES_CSV, COMPILE_FAILURE_FIELDNAMES, row)
+    append_csv_row(config.compile_failures_csv, COMPILE_FAILURE_FIELDNAMES, row)
     print(f"Recorded {validation_result.stage} failure category for {test_class}: {category}")
 
 
-def write_compile_failure_summary() -> None:
+def write_compile_failure_summary(config: PipelineConfig) -> None:
     """Write category counts and percentages from the compile failure detail CSV."""
-    if not COMPILE_FAILURES_CSV.exists():
+    if not config.compile_failures_csv.exists():
         return
 
     library_counts: dict[str, Counter[str]] = {}
-    with open(COMPILE_FAILURES_CSV, "r", encoding="utf-8", newline="") as file:
+    with open(config.compile_failures_csv, "r", encoding="utf-8", newline="") as file:
         for row in csv.DictReader(file):
             library = row.get("library", "")
             if not library:
@@ -88,8 +88,8 @@ def write_compile_failure_summary() -> None:
     if not library_counts:
         return
 
-    COMPILE_FAILURE_SUMMARY_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with open(COMPILE_FAILURE_SUMMARY_CSV, "w", encoding="utf-8", newline="") as file:
+    config.compile_failure_summary_csv.parent.mkdir(parents=True, exist_ok=True)
+    with open(config.compile_failure_summary_csv, "w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=COMPILE_FAILURE_SUMMARY_FIELDNAMES)
         writer.writeheader()
         for library, category_counts in sorted(library_counts.items()):
@@ -103,7 +103,7 @@ def write_compile_failure_summary() -> None:
                         "percentage": f"{(count / total_failures) * 100:.2f}",
                     }
                 )
-    print(f"Compile failure summary written to {COMPILE_FAILURE_SUMMARY_CSV}")
+    print(f"Compile failure summary written to {config.compile_failure_summary_csv}")
 
 
 def compact_csv_message(message: str) -> str:
