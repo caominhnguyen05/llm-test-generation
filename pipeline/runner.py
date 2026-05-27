@@ -6,24 +6,25 @@ from library_prep.prep_library import prepare_library
 from pipeline.config import PipelineConfig
 from pipeline.failures import record_compile_failure, write_compile_failure_summary
 from pipeline.files import (
-    delete_generated_test,
-    save_test_code,
+    delete_test,
+    save_test,
+    count_generated_tests,
 )
 from pipeline.generation import generate_initial_test, generate_repair_test
 from pipeline.metrics import (
-    LibraryRuntimeMetrics,
+    CostMetrics,
     append_library_coverage,
     append_library_runtime_metrics,
     append_zero_coverage_row,
 )
 from pipeline.preprocess import extract_package_and_class, find_testable_sources, read_java_source
-from pipeline.validation import ValidationResult, validate_compile, validate_structure, validate_test
+from pipeline.validation import validate_compile, validate_structure, validate_test
 
 
 def process_one_source(
     config: PipelineConfig,
     source: Path,
-    metrics: LibraryRuntimeMetrics,
+    metrics: CostMetrics,
 ) -> str:
     source_file = config.source_folder / source
     source_code = read_java_source(source_file)
@@ -32,121 +33,89 @@ def process_one_source(
     test_class = f"{class_name}Test"
     test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
-    print(f"  Library: {config.library}")
-
-    test_code = generate_initial_test(source_code, package_name, class_name, config.llm_backend, metrics)
-    structure_result = validate_structure(test_code, class_name)
-    if not structure_result.passed:
-        return handle_structure_failure(config, source, test_file, test_class, structure_result.message)
-
-    save_test_code(test_file, test_code, "Initial")
+    test_code = generate_initial_test(
+        source_code, package_name, class_name, config.llm_backend, metrics
+    )
 
     for attempt in range(config.attempts + 1):
-        print(f"\nValidating {test_class} on attempt {attempt}/{config.attempts}...")
+        structure_result = validate_structure(test_code, test_class)
+        if not structure_result.passed:
+            print(f"Structure check failed for {test_class}: {structure_result.message}")
+            record_compile_failure(config, source, structure_result)
+
+            if test_file.exists():
+                compile_result = validate_compile(config, test_class)
+                if not compile_result.passed:
+                    delete_test(test_file, "structure validation failed and saved test does not compile")
+
+            return "structure check failed"
+
+        save_test(test_file, test_code)
         result = validate_test(config, test_class)
 
         if result.passed:
-            print(f"SUCCESS: {test_class} - all tests passed on attempt {attempt}.")
+            print(f"SUCCESS: {test_class} - all tests passed after {attempt} repair attempt(s).")
             return "success"
 
         if attempt == config.attempts:
-            return handle_validation_failure(config, source, test_file, test_class, result)
+            print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
+
+            if result.stage == "compile":
+                record_compile_failure(config, source, result)
+                delete_test(test_file, "compile validation failed")
+            else:
+                print(f"Keeping generated test file with assertion/runtime errors: {test_file}")
+
+            return f"{result.stage} validation failed after max repair attempts"
 
         print(f"{result.stage.title()} validation failed for {test_class}.")
         print(f"Error: {result.message}")
-        print(f"Starting repair loop {attempt + 1}/{config.attempts}...")
+        print(f"Repair attempt {attempt + 1}/{config.attempts}...")
 
         test_code = generate_repair_test(
             test_code,
-            result,
+            result.message,
             source_code,
             package_name,
             class_name,
             config.llm_backend,
             metrics,
         )
-        structure_result = validate_structure(test_code, class_name)
-        if not structure_result.passed:
-            return handle_structure_failure(config, source, test_file, test_class, structure_result.message)
 
-        save_test_code(test_file, test_code, "Repaired")
-
-    return "validation failed"
-
-
-def handle_structure_failure(
-    config: PipelineConfig,
-    source: Path,
-    test_file: Path,
-    test_class: str,
-    message: str,
-) -> str:
-    print(f"Structure validation failed for {test_class}: {message}")
-
-    record_compile_failure(
-        config,
-        source,
-        test_class,
-        ValidationResult(False, "structure", message),
-    )
-
-    if test_file.exists():
-        compile_result = validate_compile(config, test_class)
-        if not compile_result.passed:
-            delete_generated_test(test_file, "structure validation failed and saved test no longer compiles")
-        else:
-            print(f"Keeping previously generated compiling test after structure failure: {test_file}")
-
-    return "structure validation failed"
-
-
-def handle_validation_failure(
-    config: PipelineConfig,
-    source: Path,
-    test_file: Path,
-    test_class: str,
-    result: ValidationResult,
-) -> str:
-    print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
-    print(f"Validation failed for {test_class}: {result.message}")
-
-    if result.stage in {"compile", "structure"}:
-        record_compile_failure(config, source, test_class, result)
-        delete_generated_test(test_file, f"{result.stage} validation failed")
-    else:
-        print(f"Keeping generated test file with assertion/runtime errors: {test_file}")
-
-    return f"{result.stage} validation failed after max repair attempts"
+def print_failure_summary(failures: list[tuple[Path, str]]) -> None:
+    print(f"\nCompleted with {len(failures)} failed source file(s).")
+    for source, result in failures:
+        print(f"- {source}: {result}")
 
 
 def run_library_pipeline(config: PipelineConfig) -> None:
-    if not config.library_path.exists():
-        print(f"Library folder does not exist, preparing {config.library}: {config.library_path}")
-        if not prepare_library(config):
-            print(f"Skipping {config.library}: library preparation failed.")
-            return
+    """Run the LLM test generation pipeline for one library."""
+    # 1. Download and construct library 
+    if not prepare_library(config):
+        print(f"Skipping {config.library}: library preparation failed.")
+        return
 
     # Remove old generated tests before writing new ones
     test_root = config.library_path / "src/test"
     if test_root.exists():
         rmtree(test_root)
-        print(f"Removed existing test folder: {test_root}")
 
     started_at = time.monotonic() # Start timer for calculating pipeline runtime
-    metrics = LibraryRuntimeMetrics()
+    metrics = CostMetrics()
 
-    # 1. Identify testable classes in the library
+    # 2. Identify testable classes in the library
     testable_sources = find_testable_sources(config)
-    if not testable_sources:
+    num_testable = len(testable_sources)
+    if num_testable == 0:
         print(f"Skipping {config.library}: no testable Java source files found in {config.source_folder}")
         return
 
-    print(f"Found {len(testable_sources)} testable Java source files in {config.library}.")
+    print(f"Found {num_testable} testable Java source files in {config.library}.")
     failures = []
 
-    # 2. Generate, validate, and repair tests for each testable source file
+    # 3. Generate, validate, and repair tests for each testable source file
     for index, source in enumerate(testable_sources, start=1):
-        print(f"\n=== [{index}/{len(testable_sources)}] {source} ===")
+        print(f"\n=== [{index}/{num_testable}] {source} ===")
         try:
             result = process_one_source(config, source, metrics)
             if result != "success":
@@ -156,23 +125,18 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             print(f"ERROR: failed while processing {source}.")
             print(exc)
 
-    if failures:
-        print(f"\nCompleted with {len(failures)} failed source file(s):")
-        for source, result in failures:
-            print(f"- {source}: {result}")
-    else:
-        print("\nCompleted successfully with no failed source files.")
+    print_failure_summary(failures)
 
-    num_generated_tests = sum(1 for _ in config.test_folder.rglob("*.java")) if config.test_folder.exists() else 0
+    num_generated_tests = count_generated_tests(config)
 
     # 3. Record coverage
     if num_generated_tests == 0:
-        append_zero_coverage_row(config, len(testable_sources))
+        append_zero_coverage_row(config, num_testable)
     else:
-        append_library_coverage(config, len(testable_sources), num_generated_tests)
+        append_library_coverage(config, num_testable, num_generated_tests)
 
     # 4. Write compile failure summary and runtime metrics
     write_compile_failure_summary(config)
 
     metrics.total_pipeline_runtime_seconds = time.monotonic() - started_at
-    append_library_runtime_metrics(config, len(testable_sources), metrics)
+    append_library_runtime_metrics(config, num_testable, metrics)
