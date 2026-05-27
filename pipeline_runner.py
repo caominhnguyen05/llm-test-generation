@@ -161,7 +161,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
         append_library_coverage(config, len(testable_sources), num_generated_tests)
 
     # 4. Write compile failure summary and runtime metrics
-    write_compile_failure_summary()
+    write_compile_failure_summary(config)
 
     metrics.total_pipeline_runtime_seconds = time.monotonic() - started_at
     append_library_runtime_metrics(config, len(testable_sources), metrics)
