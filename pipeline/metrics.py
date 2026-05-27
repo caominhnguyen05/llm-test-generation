@@ -26,11 +26,10 @@ COST_FIELDNAMES = [
 
 def append_csv_row(output_path: Path, fieldnames: list[str], row: dict[str, str]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    should_write_header = not output_path.exists() or output_path.stat().st_size == 0
 
     with open(output_path, "a", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
-        if should_write_header:
+        if not output_path.exists() or output_path.stat().st_size == 0:
             writer.writeheader()
         writer.writerow({fieldname: row.get(fieldname, "") for fieldname in fieldnames})
 
@@ -67,7 +66,7 @@ def append_library_coverage(config: PipelineConfig, testable_source_files: int, 
     """Run JaCoCo once for the completed library and append its coverage row."""
     print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
 
-    prep_result = run_coverage_after_ignoring_failures(config.library_path, 300)
+    prep_result = run_coverage_after_ignoring_failures(config, 300)
 
     row = build_coverage_row(
         config,
