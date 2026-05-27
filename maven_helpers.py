@@ -5,6 +5,9 @@ from pathlib import Path
 from shutil import move
 from pipeline_config import ERROR_CONTEXT_CHARS, MAVEN_TIMEOUT_SECONDS
 
+MAVEN_TIMEOUT_SECONDS = 100
+ERROR_CONTEXT_CHARS = 6000
+
 
 @contextmanager
 def only_test_class_visible(library_path: Path, test_class: str):
