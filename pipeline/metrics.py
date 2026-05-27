@@ -4,7 +4,6 @@ from pathlib import Path
 
 from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
 from coverage.coverage_pipeline import run_coverage_after_ignoring_failures
-from coverage.jacoco import build_coverage_row
 from llm.client import LLMCallMetrics
 from pipeline.config import PipelineConfig
 
@@ -62,44 +61,20 @@ class CostMetrics:
         self.record_call(metrics)
 
 
-def append_library_coverage(config: PipelineConfig, testable_source_files: int, generated_test_classes: int) -> None:
-    """Run JaCoCo once for the completed library and append its coverage row."""
-    prep_result = run_coverage_after_ignoring_failures(config, 300)
-
-    row = build_coverage_row(
+def append_library_coverage(
+    config: PipelineConfig,
+    testable_source_files: int,
+    generated_test_classes: int,
+) -> None:
+    """Append the completed library coverage row."""
+    row = run_coverage_after_ignoring_failures(
         config,
-        testable_source_files=testable_source_files,
-        generated_test_classes=generated_test_classes,
-        test_counts=prep_result.test_counts,
+        300,
+        testable_source_files,
+        generated_test_classes,
     )
     append_csv_row(config.coverage_csv, COVERAGE_FIELDNAMES, row)
     print(f"Coverage row written to {config.coverage_csv}")
-
-
-def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int) -> None:
-    """Append a zero-coverage row when no generated test class compiled."""
-    row = library_coordinates(config) | {
-        "source": "LLM",
-        "instruction_coverage": "0",
-        "branch_coverage": "0",
-        "line_coverage": "0",
-        "complexity_coverage": "0",
-        "method_coverage": "0",
-        "class_coverage": "0",
-        "testable_source_files": str(testable_source_files),
-        "generated_test_classes": "0",
-        "compilation_success_rate": "0",
-        "tests_total": "0",
-        "tests_passed": "0",
-        "tests_failed_assertions": "0",
-        "tests_runtime_errors": "0",
-        "runtime_success_rate": "0",
-        "failed_assertion_rate": "0",
-        "runtime_error_rate": "0",
-    }
-
-    append_csv_row(config.coverage_csv, COVERAGE_FIELDNAMES, row)
-    print(f"Zero coverage row written to {config.coverage_csv}")
 
 
 def append_library_runtime_metrics(
