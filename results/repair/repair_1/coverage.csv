@@ -1,8 +1,0 @@
-group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,testable_source_files,generated_test_classes,compilation_success_rate,tests_total,tests_passed,tests_failed_assertions,tests_runtime_errors,runtime_success_rate,failed_assertion_rate,runtime_error_rate
-aopalliance,aopalliance,1.0,LLM,82.09,,78.95,75.00,75.00,100.00,3,1,0.3333,6,3,3,0,0.5000,0.5000,0.0000
-com.github.lalyos,jfiglet,0.0.8,LLM,64.75,57.14,59.29,53.66,61.54,50.00,2,1,0.5000,12,10,0,2,0.8333,0.0000,0.1667
-com.github.spotbugs,spotbugs-annotations,4.8.6,LLM,82.17,75.00,87.50,80.00,87.50,66.67,2,2,1.0000,10,10,0,0,1.0000,0.0000,0.0000
-commons-fileupload,commons-fileupload,1.4,LLM,28.15,22.51,23.38,18.09,21.76,30.77,23,10,0.4348,45,30,15,0,0.6667,0.3333,0.0000
-commons-logging,commons-logging,1.2,LLM,22.91,12.26,24.95,20.82,39.06,40.74,13,7,0.5385,84,76,8,0,0.9048,0.0952,0.0000
-commons-pool,commons-pool,1.6,LLM,5.48,4.31,6.42,5.11,8.90,15.22,16,6,0.3750,46,38,8,0,0.8261,0.1739,0.0000
-io.grpc,grpc-protobuf,1.62.2,LLM,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0
