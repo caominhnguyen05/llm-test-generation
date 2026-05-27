@@ -1,7 +1,7 @@
 from llm.client import generate_llm_response
 from llm.prompts import get_generation_prompt, get_repair_prompt
 from pipeline.metrics import CostMetrics
-from pipeline.postprocess import normalize_test_code
+from pipeline.postprocess import postprocess_test_code
 
 
 def generate_initial_test(
@@ -19,7 +19,7 @@ def generate_initial_test(
     )
     
     metrics.record_call(call_metrics)
-    return normalize_test_code(llm_output, package_name, class_name, source_code)
+    return postprocess_test_code(llm_output, package_name, class_name, source_code)
 
 
 def generate_repair_test(
@@ -41,4 +41,4 @@ def generate_repair_test(
 
     metrics.record_repair_call(call_metrics)
 
-    return normalize_test_code(llm_output, package_name, class_name, source_code)
+    return postprocess_test_code(llm_output, package_name, class_name, source_code)
