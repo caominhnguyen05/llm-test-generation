@@ -28,26 +28,26 @@ class PipelineConfig:
     @property
     def coverage_csv(self) -> Path:
         if self.mode == "final":
-            return self.results_root / "coverage" / f"coverage_{self.llm_backend}.csv"
-        return self.results_root / "coverage" / f"repair_{self.attempts}.csv"
+            return self.results_root / f"{self.llm_backend}" / "coverage.csv"
+        return self.results_root / f"repair_{self.attempts}" / "coverage.csv"
 
     @property
     def cost_csv(self) -> Path:
         if self.mode == "final":
-            return self.results_root / "cost" / f"cost_{self.llm_backend}.csv"
-        return self.results_root / "cost" / f"repair_{self.attempts}.csv"
+            return self.results_root / f"{self.llm_backend}" / "cost.csv"
+        return self.results_root / f"repair_{self.attempts}" / "cost.csv"
 
     @property
     def compile_failures_csv(self) -> Path:
         if self.mode == "final":
-            return self.results_root / "errors" / f"failures_{self.llm_backend}.csv"
-        return self.results_root / "errors" / f"failures_repair_{self.attempts}.csv"
+            return self.results_root / f"{self.llm_backend}" / "compile_failures.csv"
+        return self.results_root / f"repair_{self.attempts}" / "compile_failures.csv"
     
     @property
     def compile_failure_summary_csv(self) -> Path:
         if self.mode == "final":
-            return self.results_root / "errors" / f"failure_summary_{self.llm_backend}.csv"
-        return self.results_root / "errors" / f"failure_summary_repair_{self.attempts}.csv"
+            return self.results_root / f"{self.llm_backend}" / "compile_failures_summary.csv"
+        return self.results_root / f"repair_{self.attempts}" / "compile_failures_summary.csv"
 
     @property
     def group_id(self) -> str:
