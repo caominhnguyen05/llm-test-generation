@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 
 from coverage.models import TestCounts
-from pipeline_config import PipelineConfig, REPO_ROOT
+from pipeline.config import PipelineConfig, REPO_ROOT
 
 
 JACOCO_VERSION = "0.8.12"
@@ -16,7 +16,7 @@ JACOCO_CLI_URL = (
 )
 
 
-def ensure_jacoco_cli() -> Path:
+def download_jacoco_cli() -> Path:
     if JACOCO_CLI_JAR.exists():
         return JACOCO_CLI_JAR
 
@@ -30,17 +30,12 @@ def ensure_jacoco_cli() -> Path:
     return JACOCO_CLI_JAR
 
 
-def artifact_jar(project_path: Path) -> Path | None:
-    artifacts_dir = project_path / "artifacts"
-    jars = [path for path in sorted(artifacts_dir.glob("*.jar")) if not path.name.endswith("-sources.jar")]
-    return jars[0] if jars else None
-
-
 def project_relative(project_path: Path, path: Path) -> str:
     return str(path.relative_to(project_path))
 
 
-def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
+def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
+    project_path = config.library_path
     print(f"Running JaCoCo for {project_path.name}...", file=sys.stderr)
     test_result = subprocess.run(
         [
@@ -63,10 +58,10 @@ def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
         return False
 
     exec_file = project_path / "target/jacoco.exec"
-    classfiles = artifact_jar(project_path)
+    classfiles = config.library_path / "artifacts"/ f"{config.artifact_id}-{config.version}.jar"
     sourcefiles = project_path / "prompt_sources"
     report_dir = project_path / "target/site/jacoco"
-    jacoco_cli_jar = ensure_jacoco_cli()
+    jacoco_cli_jar = download_jacoco_cli()
 
     missing = [
         str(path)
