@@ -1,6 +1,5 @@
 JUNIT_DEPENDENCY_XML = """
     <dependency>
-        <!-- This element was inserted by download.py -->
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
         <version>4.13.2</version>
@@ -11,7 +10,6 @@ JUNIT_DEPENDENCY_XML = """
 
 MOCKITO_DEPENDENCY_XML = """
     <dependency>
-        <!-- This element was inserted by download.py -->
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
         <version>4.11.0</version>
@@ -22,7 +20,6 @@ MOCKITO_DEPENDENCY_XML = """
 
 SUREFIRE_PLUGIN_XML = """
     <plugin>
-        <!-- This element was inserted by download.py -->
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
