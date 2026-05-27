@@ -27,7 +27,7 @@ SUREFIRE_PLUGIN_XML = """
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
         <configuration>
-            <argLine>@{jacoco.argLine}</argLine>
+            <argLine>@{argLine}</argLine>
             <includes>
                 <include>**/*Test.java</include>
             </includes>
@@ -43,37 +43,6 @@ SUREFIRE_PLUGIN_XML = """
 """
 
 
-JACOCO_PLUGIN_XML = """
-    <plugin>
-        <!-- This element was inserted by download.py -->
-        <groupId>org.jacoco</groupId>
-        <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.12</version>
-        <configuration>
-            <propertyName>jacoco.argLine</propertyName>
-            <excludes>
-                <exclude>META-INF/versions/**</exclude>
-            </excludes>
-        </configuration>
-        <executions>
-            <execution>
-                <id>prepare-agent</id>
-                <goals>
-                    <goal>prepare-agent</goal>
-                </goals>
-            </execution>
-            <execution>
-                <id>report</id>
-                <phase>verify</phase>
-                <goals>
-                    <goal>report</goal>
-                </goals>
-            </execution>
-        </executions>
-    </plugin>
-"""
-
-
 FIXED_DEPENDENCIES = (
     JUNIT_DEPENDENCY_XML,
     MOCKITO_DEPENDENCY_XML,
@@ -82,5 +51,4 @@ FIXED_DEPENDENCIES = (
 
 FIXED_PLUGINS = (
     SUREFIRE_PLUGIN_XML,
-    JACOCO_PLUGIN_XML,
 )

@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 from shutil import rmtree
 
+from libraries_builder.download import prepare_library
 from pipeline_config import PipelineConfig
 from pipeline_failures import record_compile_failure, write_compile_failure_summary
 from pipeline_files import (
@@ -112,8 +113,10 @@ def handle_validation_failure(
 
 def run_library_pipeline(config: PipelineConfig) -> None:
     if not config.library_path.exists():
-        print(f"Skipping {config.library}: library folder does not exist: {config.library_path}")
-        return
+        print(f"Library folder does not exist, preparing {config.library}: {config.library_path}")
+        if not prepare_library(config):
+            print(f"Skipping {config.library}: library preparation failed.")
+            return
 
     # Remove old generated tests before writing new ones
     test_root = config.library_path / "src/test"
@@ -161,7 +164,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
         append_library_coverage(config, len(testable_sources), num_generated_tests)
 
     # 4. Write compile failure summary and runtime metrics
-    write_compile_failure_summary()
+    write_compile_failure_summary(config)
 
     metrics.total_pipeline_runtime_seconds = time.monotonic() - started_at
     append_library_runtime_metrics(config, len(testable_sources), metrics)

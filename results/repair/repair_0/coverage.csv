@@ -1,0 +1,4 @@
+group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,testable_source_files,generated_test_classes,compilation_success_rate,tests_total,tests_passed,tests_failed_assertions,tests_runtime_errors,runtime_success_rate,failed_assertion_rate,runtime_error_rate
+aopalliance,aopalliance,1.0,LLM,35.82,,47.37,62.50,62.50,100.00,3,1,0.3333,4,3,1,0,0.7500,0.2500,0.0000
+com.github.lalyos,jfiglet,0.0.8,LLM,63.76,57.14,58.41,51.22,53.85,50.00,2,1,0.5000,12,9,1,2,0.7500,0.0833,0.1667
+com.github.spotbugs,spotbugs-annotations,4.8.6,LLM,82.17,75.00,87.50,80.00,87.50,66.67,2,2,1.0000,10,10,0,0,1.0000,0.0000,0.0000

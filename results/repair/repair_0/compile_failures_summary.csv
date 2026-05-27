@@ -1,0 +1,3 @@
+library,category,compile_failures,percentage
+aopalliance:aopalliance:1.0,cannot_find_symbol,2,100.00
+com.github.lalyos:jfiglet:0.0.8,constructor_mismatch,1,100.00

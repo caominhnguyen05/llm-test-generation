@@ -7,18 +7,29 @@ from coverage.models import TestCounts
 from pipeline_config import PipelineConfig
 
 
+JACOCO_VERSION = "0.8.12"
+SHARED_JACOCO_CLI = Path(__file__).resolve().parent / "jacococli.jar"
+
+
+def artifact_jar(project_path: Path) -> Path | None:
+    artifacts_dir = project_path / "artifacts"
+    jars = [path for path in sorted(artifacts_dir.glob("*.jar")) if not path.name.endswith("-sources.jar")]
+    return jars[0] if jars else None
+
+
+def project_relative(project_path: Path, path: Path) -> str:
+    return str(path.relative_to(project_path))
+
+
 def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
     print(f"Running JaCoCo for {project_path.name}...", file=sys.stderr)
-    result = subprocess.run(
+    test_result = subprocess.run(
         [
             "mvn.cmd",
             "-q",
             "clean",
-            "jacoco:prepare-agent",
+            "org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent",
             "test",
-            "jacoco:report",
-            "-Drat.skip=true",
-            "-Danimal.sniffer.skip=true",
             "-Dmaven.test.failure.ignore=true",
         ],
         cwd=project_path,
@@ -27,11 +38,53 @@ def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
         timeout=timeout,
     )
 
-    if result.returncode == 0:
+    if test_result.returncode != 0:
+        output = test_result.stdout + "\n" + test_result.stderr
+        print(f"JaCoCo test run failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
+        return False
+
+    exec_file = project_path / "target/jacoco.exec"
+    classfiles = artifact_jar(project_path)
+    sourcefiles = project_path / "prompt_sources"
+    report_dir = project_path / "target/site/jacoco"
+
+    missing = [
+        str(path)
+        for path in (exec_file, classfiles, sourcefiles, SHARED_JACOCO_CLI)
+        if path is None or not path.exists()
+    ]
+    if missing:
+        print(f"Cannot run JaCoCo CLI; missing: {', '.join(missing)}", file=sys.stderr)
+        return False
+
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_result = subprocess.run(
+        [
+            "java",
+            "-jar",
+            str(SHARED_JACOCO_CLI),
+            "report",
+            project_relative(project_path, exec_file),
+            "--classfiles",
+            project_relative(project_path, classfiles),
+            "--sourcefiles",
+            project_relative(project_path, sourcefiles),
+            "--xml",
+            project_relative(project_path, report_dir / "jacoco.xml"),
+            "--html",
+            project_relative(project_path, report_dir),
+        ],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+    if report_result.returncode == 0:
         return True
 
-    output = result.stdout + "\n" + result.stderr
-    print(f"JaCoCo failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
+    output = report_result.stdout + "\n" + report_result.stderr
+    print(f"JaCoCo CLI failed for {project_path.name}:\n{output.strip()[-3000:]}", file=sys.stderr)
     return False
 
 

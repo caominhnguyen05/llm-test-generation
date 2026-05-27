@@ -26,8 +26,8 @@ target/
 *.war
 *.ear
 
-libraries/
-old_pipelines/
-libraries_sample/
 libraries_repair_0/
 libraries_repair_1/
+libraries_repair_2/
+libraries_final_ollama/
+libraries_final_openrouter/

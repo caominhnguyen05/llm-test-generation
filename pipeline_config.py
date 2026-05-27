@@ -3,24 +3,55 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_LIBRARIES_ROOT = Path("libraries_repair_1")
 DEFAULT_TARGET_LIBRARY = "commons-cli:commons-cli:1.2"
-
-MAX_REPAIR_ATTEMPTS = 2
-MAVEN_TIMEOUT_SECONDS = 100
-ERROR_CONTEXT_CHARS = 6000
-
-COVERAGE_CSV = REPO_ROOT / "results/coverage_ollama/coverage_repair_1.csv"
-COST_CSV = REPO_ROOT / "results/cost_ollama/runtime_repair_1.csv"
-COMPILE_FAILURES_CSV = REPO_ROOT / "results/errors/compile_failures_1.csv"
-COMPILE_FAILURE_SUMMARY_CSV = REPO_ROOT / "results/errors/compile_failure_summary_1.csv"
 
 
 @dataclass(frozen=True)
 class PipelineConfig:
     library: str
     attempts: int
-    libraries_csv: Path | None = None
+    mode: str
+    llm_backend: str
+
+    @property
+    def libraries_csv(self) -> Path:
+        return REPO_ROOT / "csv_data" / f"libraries_{self.mode}.csv"
+
+    @property
+    def libraries_root(self) -> Path:
+        if self.mode == "final":
+            return Path(f"libraries_final_{self.llm_backend}")
+        return Path(f"libraries_repair_{self.attempts}")
+    
+    @property
+    def results_root(self) -> Path:
+        if self.mode == "repair":
+            return REPO_ROOT / "results" / "repair"
+        return REPO_ROOT / "results" / "final"
+    
+    @property
+    def coverage_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / f"{self.llm_backend}" / "coverage.csv"
+        return self.results_root / f"repair_{self.attempts}" / "coverage.csv"
+
+    @property
+    def cost_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / f"{self.llm_backend}" / "cost.csv"
+        return self.results_root / f"repair_{self.attempts}" / "cost.csv"
+
+    @property
+    def compile_failures_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / f"{self.llm_backend}" / "compile_failures.csv"
+        return self.results_root / f"repair_{self.attempts}" / "compile_failures.csv"
+    
+    @property
+    def compile_failure_summary_csv(self) -> Path:
+        if self.mode == "final":
+            return self.results_root / f"{self.llm_backend}" / "compile_failures_summary.csv"
+        return self.results_root / f"repair_{self.attempts}" / "compile_failures_summary.csv"
 
     @property
     def group_id(self) -> str:
@@ -36,11 +67,11 @@ class PipelineConfig:
 
     @property
     def library_path(self) -> Path:
-        return DEFAULT_LIBRARIES_ROOT / self.group_id / self.artifact_id / self.version
+        return self.libraries_root / self.group_id / self.artifact_id / self.version
 
     @property
     def source_folder(self) -> Path:
-        return self.library_path / "src/main/java"
+        return self.library_path / "prompt_sources"
 
     @property
     def test_folder(self) -> Path:
@@ -50,6 +81,14 @@ class PipelineConfig:
 def parse_args() -> PipelineConfig:
     parser = argparse.ArgumentParser(
         description="Generate and repair JUnit 4 tests for Java classes in downloaded libraries."
+    )
+
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["repair", "final"],
+        required=True,
+        help="Experiment mode: repair for repair-attempt comparison, final for final coverage experiment.",
     )
 
     parser.add_argument(
@@ -63,16 +102,16 @@ def parse_args() -> PipelineConfig:
 
     parser.add_argument(
         "--attempts",
-        type=int,
-        default=MAX_REPAIR_ATTEMPTS,
+        type=non_negative_int,
+        required=True,
         help="Maximum number of repair attempts per generated test.",
     )
 
     parser.add_argument(
-        "--libraries_csv",
-        type=Path,
-        default=None,
-        help="CSV file containing group_id, artifact_id, and version columns.",
+        "--llm_backend",
+        choices=["ollama", "openrouter"],
+        default="ollama",
+        help="LLM backend to use: ollama or openrouter. Default is ollama.",
     )
 
     args = parser.parse_args()
@@ -80,7 +119,8 @@ def parse_args() -> PipelineConfig:
     return PipelineConfig(
         library=args.library,
         attempts=args.attempts,
-        libraries_csv=args.libraries_csv,
+        mode=args.mode,
+        llm_backend=args.llm_backend,
     )
 
 
@@ -95,3 +135,10 @@ def parse_coordinate(library: str) -> tuple[str, str, str]:
 
     group_id, artifact_id, version = parts
     return group_id, artifact_id, version
+
+
+def non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("--attempts must be at least 0.")
+    return parsed

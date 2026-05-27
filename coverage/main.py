@@ -8,7 +8,7 @@ from coverage.models import CoveragePrepResult
 from coverage.surefire import read_surefire_test_results
 
 
-def collect_coverage_after_ignoring_failures(project_path: Path, timeout: int) -> CoveragePrepResult:
+def run_coverage_after_ignoring_failures(project_path: Path, timeout: int) -> CoveragePrepResult:
     """Ignore failing/erroring tests, then run JaCoCo while preserving original test counts."""
     prep_result = collect_failures_and_ignore_tests(project_path, timeout)
     run_jacoco_coverage(project_path, timeout)
@@ -25,8 +25,6 @@ def collect_failures_and_ignore_tests(project_path: Path, timeout: int) -> Cover
             "clean",
             "test",
             "-Dmaven.test.failure.ignore=true",
-            "-Drat.skip=true",
-            "-Danimal.sniffer.skip=true",
         ],
         cwd=project_path,
         capture_output=True,
