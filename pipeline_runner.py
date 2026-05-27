@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 from shutil import rmtree
 
-from libraries_builder.download import prepare_library
+from library_prep.prep_library import prepare_library
 from pipeline_config import PipelineConfig
 from pipeline_failures import record_compile_failure, write_compile_failure_summary
 from pipeline_files import (
