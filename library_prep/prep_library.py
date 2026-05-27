@@ -129,6 +129,7 @@ def prepare_library(config: PipelineConfig) -> bool:
         print(f"{message}...")
         if not step(config):
             print(f"Preparation failed during: {message}")
+            delete_library(config, "preparation failed")
             return False
 
     print(f"Prepared library: {config.library}")
