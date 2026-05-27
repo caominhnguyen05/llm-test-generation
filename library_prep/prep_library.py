@@ -9,10 +9,7 @@ import requests
 
 from pipeline_config import PipelineConfig
 
-try:
-    from .config import FIXED_DEPENDENCIES, FIXED_PLUGINS
-except ImportError:
-    from config import FIXED_DEPENDENCIES, FIXED_PLUGINS
+from library_prep.config import FIXED_DEPENDENCIES, FIXED_PLUGINS
 
 
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
@@ -157,7 +154,7 @@ def create_minimal_pom(path: Path, artifact: MavenArtifact) -> None:
     for name, value in (
         ("modelVersion", "4.0.0"),
         ("groupId", "llm.generated.tests"),
-        ("artifactId", f"{artifact.artifact_id}-test"),
+        ("artifactId", f"{artifact.artifact_id}-llm-tests"),
         ("version", "1.0.0"),
         ("packaging", "jar"),
     ):

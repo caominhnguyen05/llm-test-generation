@@ -1,4 +1,4 @@
-from llm.main import (
+from llm.client import (
     generate_llm_response,
 )
 from llm.prompts import (
@@ -14,12 +14,14 @@ def generate_initial_test(
     source_code: str,
     package_name: str,
     class_name: str,
+    llm_backend: str,
     metrics: LibraryRuntimeMetrics,
 ) -> str:
     """Ask the LLM to generate the first version of the JUnit test class."""
     print(f"\n[Attempt 0] Asking LLM to generate test class for {class_name} in {package_name}...")
     llm_output, call_metrics = generate_llm_response(
         get_generation_prompt(source_code, package_name, class_name),
+        llm_backend,
     )
     
     metrics.record_call(call_metrics)
@@ -32,12 +34,14 @@ def generate_repair_test(
     source_code: str,
     package_name: str,
     class_name: str,
+    llm_backend: str,
     metrics: LibraryRuntimeMetrics,
 ) -> str:
     """Ask the LLM to repair a generated test after validation fails."""
     print(f"Asking LLM to repair the test for {class_name} in {package_name}...")
     llm_output, call_metrics = generate_llm_response(
         get_repair_prompt(test_code, validation_result.message, source_code, package_name, class_name),
+        llm_backend,
     )
     
     metrics.record_repair_call(call_metrics)

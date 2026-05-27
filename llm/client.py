@@ -12,7 +12,6 @@ from llm.config import (
     OPENROUTER_MODEL,
     LLM_TEMPERATURE,
     LLM_SEED,
-    LLM_BACKEND,
 )
 
 
@@ -30,13 +29,13 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-def generate_llm_response(prompt: str) -> tuple[str, LLMCallMetrics]:
-    """Route LLM calls through the backend selected in the LLM config."""
-    if LLM_BACKEND == "openrouter":
+def generate_llm_response(prompt: str, llm_backend: str) -> tuple[str, LLMCallMetrics]:
+    """Route LLM calls through the backend selected in the pipeline config."""
+    if llm_backend == "openrouter":
         return generate_llm_response_openrouter(prompt)
-    if LLM_BACKEND == "ollama":
+    if llm_backend == "ollama":
         return generate_llm_response_ollama(prompt)
-    raise ValueError(f"Unsupported LLM backend: {LLM_BACKEND!r}")
+    raise ValueError(f"Unsupported LLM backend: {llm_backend!r}")
 
 
 def generate_llm_response_openrouter(

@@ -26,8 +26,6 @@ target/
 *.war
 *.ear
 
-libraries_repair_0/
-libraries_repair_1/
-libraries_repair_2/
-libraries_final_ollama/
-libraries_final_openrouter/
+# Generated library workspaces
+libraries_repair_*/
+libraries_final_*/
