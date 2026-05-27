@@ -24,11 +24,6 @@ def has_result_row(csv_path: Path, library: str) -> bool:
 
     return False
 
-def is_library_completed(config, library: str) -> bool:
-    return (
-        has_result_row(config.coverage_csv, library)
-        and has_result_row(config.cost_csv, library)
-    )
 
 def read_libraries_csv(csv_path: Path) -> list[str]:
     """Read Maven coordinates from a CSV file."""
@@ -56,13 +51,13 @@ def main() -> None:
         libraries_list = read_libraries_csv(config.libraries_csv)
 
     for index, library in enumerate(libraries_list, start=1):
-        print(f"\n{'=' * 15}")
+        print(f"\n{'=' * 20}")
         print(f"Running library {index}/{len(libraries_list)}: {library}")
-        print(f"{'=' * 15}")
+        print(f"{'=' * 20}")
 
         lib_config = replace(config, library=library)
 
-        if is_library_completed(lib_config, library):
+        if has_result_row(lib_config.coverage_csv, library) and has_result_row(lib_config.cost_csv, library):
             print(f"Skipping {library}: coverage and cost rows already exist.")
             continue
 
