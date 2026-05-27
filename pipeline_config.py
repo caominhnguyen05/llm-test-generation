@@ -20,8 +20,8 @@ class PipelineConfig:
     @property
     def libraries_root(self) -> Path:
         if self.mode == "final":
-            return Path(f"libraries_final_{self.llm_backend}")
-        return Path(f"libraries_repair_{self.attempts}")
+            return REPO_ROOT / f"libraries_final_{self.llm_backend}"
+        return REPO_ROOT / f"libraries_repair_{self.attempts}_{self.llm_backend}"
     
     @property
     def results_root(self) -> Path:
