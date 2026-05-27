@@ -2,7 +2,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class PipelineConfig:
