@@ -48,12 +48,13 @@ This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`, a
 
 For each row, it:
 
-- Downloads the `-sources.jar` from Maven Central.
-- Extracts Java source files into `src/main/java`.
-- Downloads the artifact `pom.xml`.
-- Adds the required JUnit, Mockito, Surefire, and JaCoCo configuration.
-- Compiles the generated Maven project.
-- Keeps only libraries that compile successfully.
+- Downloads the artifact `.jar` and `-sources.jar` from Maven Central.
+- Stores both jars under `artifacts/`.
+- Extracts Java source files into `prompt_sources/` for prompting and JaCoCo source mapping.
+- Creates a small Maven test harness whose dependency is the original library coordinate.
+- Adds JUnit, Mockito, Surefire, and a JaCoCo javaagent argLine.
+- Downloads JaCoCo agent and CLI jars into `artifacts/`.
+- Keeps only libraries whose test harness compiles successfully.
 
 ### 3. Run the LLM test-generation pipeline
 
@@ -76,10 +77,10 @@ Available arguments:
 --library         Maven coordinates of the target library.
                   Example: org.apache.commons:commons-csv:1.8
 
---libraries-root  Root folder containing downloaded libraries.
-                  Default: libraries_initial
+--libraries-root  Root folder containing prepared library test harnesses.
+                  Default: libraries_test
 
---source          Java file relative to src/main/java.
+--source          Java file relative to prompt_sources.
                   Only needed when running one class.
                   Example: org/apache/commons/csv/CSVParser.java
 
