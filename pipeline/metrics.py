@@ -43,7 +43,7 @@ def library_coordinates(config: PipelineConfig) -> dict[str, str]:
 
 
 @dataclass
-class LibraryRuntimeMetrics:
+class CostMetrics:
     total_llm_calls: int = 0
     repair_calls: int = 0
     total_llm_generation_time_ns: int = 0
@@ -64,8 +64,6 @@ class LibraryRuntimeMetrics:
 
 def append_library_coverage(config: PipelineConfig, testable_source_files: int, generated_test_classes: int) -> None:
     """Run JaCoCo once for the completed library and append its coverage row."""
-    print(f"\nRunning JaCoCo coverage for completed library: {config.library}")
-
     prep_result = run_coverage_after_ignoring_failures(config, 300)
 
     row = build_coverage_row(
@@ -107,7 +105,7 @@ def append_zero_coverage_row(config: PipelineConfig, testable_source_files: int)
 def append_library_runtime_metrics(
     config: PipelineConfig,
     total_classes_under_test: int,
-    metrics: LibraryRuntimeMetrics,
+    metrics: CostMetrics,
 ) -> None:
     row = library_coordinates(config) | {
         "total_classes_under_test": str(total_classes_under_test),
