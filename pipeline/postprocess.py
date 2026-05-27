@@ -22,6 +22,7 @@ SYMBOL_IMPORTS = {
     "StringWriter": "import java.io.StringWriter;",
 }
 
+
 def contains_class_declaration(source_code: str, class_name: str) -> bool:
     return bool(re.search(rf"\bclass\s+{re.escape(class_name)}\b", source_code))
 
@@ -131,5 +132,31 @@ def normalize_test_code(test_code: str, package_name: str, class_name: str, sour
 
     imports = set(existing_imports) | infer_missing_imports(test_code, source_code)
     imports_block = "\n".join(sorted(imports))
+    test_code = add_junit_test_timeouts(test_code)
 
     return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
+
+
+def add_junit_test_timeouts(test_code: str) -> str:
+    """Add timeout = 2000 to each @Test annotation in the test code."""
+
+    def add_timeout(match: re.Match[str]) -> str:
+        arguments = match.group(1)
+        timeout_argument = "timeout = 2000"
+
+        if arguments is None:
+            return f"@Test({timeout_argument})"
+
+        arguments = arguments.strip()
+        if re.search(r"\btimeout\s*=", arguments):
+            arguments = re.sub(
+                r"\btimeout\s*=\s*\d+[lL]?",
+                timeout_argument,
+                arguments,
+                count=1,
+            )
+            return f"@Test({arguments})"
+
+        return f"@Test({timeout_argument}, {arguments})"
+
+    return re.sub(r"@\s*Test(?:\s*\(([^)]*)\))?", add_timeout, test_code)
