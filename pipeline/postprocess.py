@@ -99,7 +99,7 @@ def remove_existing_imports(test_code: str) -> tuple[str, list[str]]:
     return code_without_imports.strip(), cleaned_imports
 
 
-def strip_package_declarations(test_code: str) -> str:
+def remove_package_declaration(test_code: str) -> str:
     return re.sub(r"^\s*package\s+[\w.]+;\s*\n?", "", test_code, flags=re.MULTILINE).strip()
 
 
@@ -115,13 +115,13 @@ def infer_missing_imports(test_code: str, source_code: str = "") -> set[str]:
     return imports
 
 
-def normalize_test_code(test_code: str, package_name: str, class_name: str, source_code: str = "") -> str:
+def postprocess_test_code(test_code: str, package_name: str, class_name: str, source_code: str = "") -> str:
     """Clean common LLM formatting issues and add imports needed by JUnit 4 tests."""
     expected_class = f"{class_name}Test"
     test_code = extract_java_code(test_code, expected_class)
     test_code = test_code.replace("\r\n", "\n").replace("\r", "\n").strip()
     test_code, existing_imports = remove_existing_imports(test_code)
-    test_code = strip_package_declarations(test_code)
+    test_code = remove_package_declaration(test_code)
 
     test_code = re.sub(
         r"\bpublic\s+class\s+\w+\b",
