@@ -14,6 +14,10 @@ class PipelineConfig:
     llm_backend: str
 
     @property
+    def libraries_csv(self) -> Path:
+        return REPO_ROOT / "csv_data" / f"libraries_{self.mode}.csv"
+
+    @property
     def libraries_root(self) -> Path:
         if self.mode == "final":
             return Path("libraries_final")
@@ -132,13 +136,6 @@ def parse_coordinate(library: str) -> tuple[str, str, str]:
     group_id, artifact_id, version = parts
     return group_id, artifact_id, version
 
-
-def coordinate_to_path(libraries_root: Path, library: str) -> Path | None:
-    try:
-        group_id, artifact_id, version = parse_coordinate(library)
-    except ValueError:
-        return None
-    return libraries_root / group_id / artifact_id / version
 
 def non_negative_int(value: str) -> int:
     parsed = int(value)
