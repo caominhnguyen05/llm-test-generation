@@ -1,0 +1,4 @@
+group_id,artifact_id,version,total_classes_under_test,total_llm_calls,repair_calls,total_llm_generation_time_seconds,total_pipeline_runtime_seconds,total_prompt_tokens,total_output_tokens,number_of_repair_attempts
+aopalliance,aopalliance,1.0,3,6,3,41.2308,71.8900,8469,989,1
+com.github.lalyos,jfiglet,0.0.8,2,4,2,86.8601,111.7500,10523,2203,1
+com.github.spotbugs,spotbugs-annotations,4.8.6,2,2,0,15.5406,35.3600,1476,439,1
