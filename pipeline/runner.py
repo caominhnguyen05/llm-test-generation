@@ -106,10 +106,10 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     testable_sources = find_testable_sources(config)
     num_testable = len(testable_sources)
     if num_testable == 0:
-        print(f"Skipping {config.library}: no testable Java source files found in {config.source_folder}")
+        print(f"\nSkipping {config.library}: no testable Java source files found in {config.source_folder}")
         return
 
-    print(f"Found {num_testable} testable Java source files in {config.library}.")
+    print(f"\nFound {num_testable} testable Java source files in {config.library}.")
     failures = []
 
     # 3. Generate, validate, and repair tests for each testable source file

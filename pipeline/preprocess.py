@@ -18,7 +18,7 @@ def find_testable_sources(config: PipelineConfig) -> list[Path]:
             skipped.append((relative_path, decision.reason))
 
     if len(skipped) > 0:
-        print(f"Preprocessing skipped {len(skipped)} likely non-testable source files:")
+        print(f"\nPreprocessing skipped {len(skipped)} likely non-testable source files:")
         for source, reason in skipped:
             print(f"- {source}: {reason}")
 
