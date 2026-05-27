@@ -2,13 +2,32 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import requests
 
 from coverage.models import TestCounts
-from pipeline_config import PipelineConfig
+from pipeline_config import PipelineConfig, REPO_ROOT
 
 
 JACOCO_VERSION = "0.8.12"
-SHARED_JACOCO_CLI = Path(__file__).resolve().parent / "jacococli.jar"
+JACOCO_CLI_JAR = REPO_ROOT / "coverage" / "jacococli.jar"
+JACOCO_CLI_URL = (
+    "https://repo1.maven.org/maven2/org/jacoco/org.jacoco.cli/"
+    f"{JACOCO_VERSION}/org.jacoco.cli-{JACOCO_VERSION}-nodeps.jar"
+)
+
+
+def ensure_jacoco_cli() -> Path:
+    if JACOCO_CLI_JAR.exists():
+        return JACOCO_CLI_JAR
+
+    print(f"Downloading JaCoCo CLI {JACOCO_VERSION}...", file=sys.stderr)
+    JACOCO_CLI_JAR.parent.mkdir(parents=True, exist_ok=True)
+
+    response = requests.get(JACOCO_CLI_URL, timeout=30)
+    response.raise_for_status()
+    JACOCO_CLI_JAR.write_bytes(response.content)
+
+    return JACOCO_CLI_JAR
 
 
 def artifact_jar(project_path: Path) -> Path | None:
@@ -47,10 +66,11 @@ def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
     classfiles = artifact_jar(project_path)
     sourcefiles = project_path / "prompt_sources"
     report_dir = project_path / "target/site/jacoco"
+    jacoco_cli_jar = ensure_jacoco_cli()
 
     missing = [
         str(path)
-        for path in (exec_file, classfiles, sourcefiles, SHARED_JACOCO_CLI)
+        for path in (exec_file, classfiles, sourcefiles, jacoco_cli_jar)
         if path is None or not path.exists()
     ]
     if missing:
@@ -62,7 +82,7 @@ def run_jacoco_coverage(project_path: Path, timeout: int) -> bool:
         [
             "java",
             "-jar",
-            str(SHARED_JACOCO_CLI),
+            str(jacoco_cli_jar),
             "report",
             project_relative(project_path, exec_file),
             "--classfiles",
