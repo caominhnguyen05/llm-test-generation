@@ -75,14 +75,12 @@ def minimal_pom_xml(config: LibConfig) -> str:
 
 
 def create_minimal_pom(config: LibConfig) -> bool:
+    pom_path = config.library_path / "pom.xml"
+
     try:
-        config.library_path.mkdir(parents=True, exist_ok=True)
-        (config.library_path / "pom.xml").write_text(
-            minimal_pom_xml(config),
-            encoding="utf-8",
-        )
+        pom_path.parent.mkdir(parents=True, exist_ok=True)
+        pom_path.write_text(minimal_pom_xml(config), encoding="utf-8")
+        return True
     except OSError as exc:
         print(f"Failed to create pom.xml for {config.library}: {exc}")
         return False
-
-    return True
