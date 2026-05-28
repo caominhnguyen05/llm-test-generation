@@ -12,14 +12,11 @@ SYMBOL_IMPORTS = {
     "Arrays.": "import java.util.Arrays;",
     "Collections.": "import java.util.Collections;",
     "Collection<": "import java.util.Collection;",
-    "Date": "import java.util.Date;",
     "Comparator<": "import java.util.Comparator;",
     "List<": "import java.util.List;",
     "Map<": "import java.util.Map;",
     "Set<": "import java.util.Set;",
     "IOException": "import java.io.IOException;",
-    "StringReader": "import java.io.StringReader;",
-    "StringWriter": "import java.io.StringWriter;",
 }
 
 
@@ -132,12 +129,12 @@ def postprocess_test_code(test_code: str, package_name: str, class_name: str, so
 
     imports = set(existing_imports) | infer_missing_imports(test_code, source_code)
     imports_block = "\n".join(sorted(imports))
-    test_code = add_junit_test_timeouts(test_code)
+    test_code = add_test_timeouts(test_code)
 
     return f"package {package_name};\n\n{imports_block}\n\n{test_code}"
 
 
-def add_junit_test_timeouts(test_code: str) -> str:
+def add_test_timeouts(test_code: str) -> str:
     """Add timeout = 2000 to each @Test annotation in the test code."""
 
     def add_timeout(match: re.Match[str]) -> str:
