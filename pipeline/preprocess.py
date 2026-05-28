@@ -1,6 +1,8 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import subprocess
 from pipeline.config import PipelineConfig
 
 def find_testable_sources(config: PipelineConfig) -> list[Path]:
@@ -142,3 +144,31 @@ def check_testability(java_file: Path, source_root: Path) -> Decision:
         return Decision(False, "constant-only class")
 
     return Decision(True)
+
+def extract_api_summary(
+    java_file: Path,
+    class_name: str,
+    extractor_dir: Path,
+    timeout: int = 30,
+) -> str:
+    java_file = java_file.resolve()
+    extractor_dir = extractor_dir.resolve()
+    mvn_command = "mvn.cmd" if os.name == "nt" else "mvn"
+
+    result = subprocess.run(
+        [
+            mvn_command,
+            "-q",
+            "exec:java",
+            f'-Dexec.args="{java_file}" {class_name}',
+        ],
+        cwd=extractor_dir,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError("API extraction failed:\n" + result.stderr.strip())
+
+    return result.stdout.strip()
