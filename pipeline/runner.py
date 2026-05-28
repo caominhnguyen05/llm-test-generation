@@ -4,6 +4,7 @@ from shutil import rmtree
 
 from library_prep.prep_library import prepare_library
 from pipeline.config import PipelineConfig
+from pipeline.experiment_logs import clear_library_logs
 from pipeline.failures import record_compile_failure, write_compile_failure_summary
 from pipeline.files import (
     delete_test,
@@ -16,7 +17,7 @@ from pipeline.metrics import (
     append_library_coverage,
     append_library_runtime_metrics,
 )
-from pipeline.preprocess import extract_package_and_class, find_testable_sources, read_java_source
+from pipeline.preprocess import extract_api_summary, extract_package_and_class, find_testable_sources, read_java_source
 from pipeline.validation import validate_compile, validate_structure, validate_test
 
 
@@ -29,11 +30,17 @@ def process_one_source(
     source_code = read_java_source(source_file)
     package_name, class_name = extract_package_and_class(source_file, config.source_folder)
 
+    api_summary = extract_api_summary(
+        java_file=source_file,
+        class_name=class_name,
+        extractor_dir=Path("java-api-extractor"),
+    )
+
     test_class = f"{class_name}Test"
     test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
     test_code = generate_initial_test(
-        source_code, package_name, class_name, config.llm_backend, metrics
+        config, source_code, package_name, class_name, api_summary, metrics
     )
 
     for attempt in range(config.attempts + 1):
@@ -72,13 +79,15 @@ def process_one_source(
         print(f"Repair attempt {attempt + 1}/{config.attempts}...")
 
         test_code = generate_repair_test(
+            config,
             test_code,
             result.message,
             source_code,
             package_name,
             class_name,
-            config.llm_backend,
+            api_summary,
             metrics,
+            attempt + 1,
         )
 
 def print_failure_summary(failures: list[tuple[Path, str]]) -> None:
@@ -93,6 +102,8 @@ def run_library_pipeline(config: PipelineConfig) -> None:
     if not prepare_library(config):
         print(f"Skipping {config.library}: library preparation failed.")
         return
+
+    clear_library_logs(config)
 
     # Remove old generated tests before writing new ones
     test_root = config.library_path / "src/test"
