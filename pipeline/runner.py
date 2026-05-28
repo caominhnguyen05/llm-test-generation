@@ -4,7 +4,7 @@ from shutil import rmtree
 
 from library_prep.prep_library import prepare_library
 from pipeline.config import LibConfig
-from pipeline.experiment_logs import clear_library_logs
+from pipeline.experiment_logs import clear_library_logs, save_error
 from pipeline.failures import record_compile_failure, write_compile_failure_summary
 from pipeline.files import (
     delete_test,
@@ -39,8 +39,11 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
     )
 
     for attempt in range(config.attempts + 1):
+        phase = f"attempt_{attempt}"
         structure_result = validate_structure(test_code, test_class)
         if not structure_result.passed:
+            save_error(config, class_name, package_name, phase, structure_result.message)
+
             print(f"Structure check failed for {test_class}: {structure_result.message}")
             record_compile_failure(config, source, structure_result)
 
@@ -57,6 +60,8 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
         if result.passed:
             print(f"SUCCESS: {test_class} - all tests passed after {attempt} repair attempt(s).")
             return "success"
+
+        save_error(config, class_name, package_name, phase, result.message)
 
         if attempt == config.attempts:
             print(f"FAILURE: max repair attempts ({config.attempts}) reached.")
