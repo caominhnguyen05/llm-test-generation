@@ -5,7 +5,7 @@ from pathlib import Path
 from shutil import move
 
 MAVEN_TIMEOUT_SECONDS = 100
-ERROR_CONTEXT_CHARS = 6000
+MAX_ERROR_CHARS = 6000
 
 
 @contextmanager
@@ -59,7 +59,7 @@ def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         return True, ""
 
     error_output = result.stdout + "\n" + result.stderr
-    return False, error_output[-ERROR_CONTEXT_CHARS:]
+    return False, error_output[-MAX_ERROR_CHARS:]
 
 
 def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
@@ -82,4 +82,4 @@ def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         )
 
     output = result.stdout + "\n" + result.stderr
-    return result.returncode == 0, output[-ERROR_CONTEXT_CHARS:]
+    return result.returncode == 0, output[-MAX_ERROR_CHARS:]
