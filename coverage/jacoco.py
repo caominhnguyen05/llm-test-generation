@@ -42,7 +42,6 @@ def run_jacoco_coverage(config: LibConfig, timeout: int) -> bool:
         [
             "mvn.cmd",
             "-q",
-            "clean",
             f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:prepare-agent",
             "test",
             "-Dmaven.test.failure.ignore=true",
