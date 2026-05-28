@@ -14,8 +14,8 @@ from pipeline.files import (
 from pipeline.generation import create_initial_test, create_repair_test
 from pipeline.metrics import (
     CostMetrics,
-    append_library_coverage,
-    append_library_runtime_metrics,
+    record_library_coverage,
+    record_library_cost_metrics,
 )
 from pipeline.preprocess import extract_api_summary, extract_package_and_class, find_testable_sources, read_java_source
 from pipeline.validation import validate_compile, validate_structure, validate_test
@@ -90,20 +90,23 @@ def print_failure_summary(failures: list[tuple[Path, str]]) -> None:
     for source, result in failures:
         print(f"- {source}: {result}")
 
+def setup_library(config: LibConfig) -> bool:
+    if not prepare_library(config):
+        print(f"Skipping {config.library}: library preparation failed.")
+        return False
+    
+    clear_library_logs(config)
+    test_root = config.library_path / "src/test"
+    if test_root.exists():
+        rmtree(test_root)
+    
+    return True
 
 def run_library_pipeline(config: LibConfig) -> None:
     """Run the LLM test generation pipeline for one library."""
     # 1. Download and construct library 
-    if not prepare_library(config):
-        print(f"Skipping {config.library}: library preparation failed.")
+    if not setup_library(config):
         return
-
-    clear_library_logs(config)
-
-    # Remove old generated tests before writing new ones
-    test_root = config.library_path / "src/test"
-    if test_root.exists():
-        rmtree(test_root)
 
     started_at = time.monotonic() # Start timer for calculating pipeline runtime
     metrics = CostMetrics()
@@ -140,11 +143,9 @@ def run_library_pipeline(config: LibConfig) -> None:
 
     num_generated_tests = count_generated_tests(config)
 
-    # 3. Record coverage
-    append_library_coverage(config, num_testable, num_generated_tests)
-
-    # 4. Write compile failure summary and runtime metrics
+    # 3. Record coverage, failures and cost metrics
+    record_library_coverage(config, num_testable, num_generated_tests)
     write_compile_failure_summary(config)
 
     metrics.total_pipeline_runtime_seconds = time.monotonic() - started_at
-    append_library_runtime_metrics(config, num_testable, metrics)
+    record_library_cost_metrics(config, num_testable, metrics)
