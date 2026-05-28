@@ -47,7 +47,6 @@ def create_repair_test(
     print(f"Asking LLM to repair the test for {class_name} in {package_name}...")
     phase = f"repair_{repair_attempt}"
     prompt = get_repair_prompt(failed_test_code, error_message, source_code, package_name, class_name, api_summary)
-    save_error(config, class_name, package_name, phase, error_message)
     save_prompt(config, class_name, package_name, phase, prompt)
 
     llm_output, call_metrics = generate_llm_response(
