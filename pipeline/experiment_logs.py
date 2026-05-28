@@ -10,6 +10,8 @@ LOG_ROOT = Path("experiment_logs")
 
 def get_library_log_dir(config: PipelineConfig) -> Path:
     library_name = f"{config.group_id}_{config.artifact_id}_{config.version}"
+    if config.mode == "final":
+        return LOG_ROOT / f"final_{config.llm_backend}" / library_name
     return LOG_ROOT / f"repair_{config.attempts}" / library_name
 
 
