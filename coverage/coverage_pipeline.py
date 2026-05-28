@@ -62,13 +62,7 @@ def collect_failures_and_ignore_tests(config: LibConfig, timeout: int) -> TestCo
     """Run tests once, parse Surefire XML, and add @Ignore to failing/erroring methods."""
     print(f"Collecting Surefire failures for {config.library}...", file=sys.stderr)
     result = subprocess.run(
-        [
-            "mvn.cmd",
-            "-q",
-            "clean",
-            "test",
-            "-Dmaven.test.failure.ignore=true",
-        ],
+        ["mvn.cmd", "-q", "clean", "test", "-Dmaven.test.failure.ignore=true"],
         cwd=config.library_path,
         capture_output=True,
         text=True,
