@@ -21,6 +21,7 @@ Output only one complete Java test file inside a single ```java fenced code bloc
 Do not include explanations, analysis, markdown outside the code block, or partial snippets.
 """.strip()
 
+
 def get_generation_prompt(source_code: str, package_name: str, class_name: str, api_summary: str) -> str:
     return f"""
 Generate a complete, compilable JUnit 4 test class for the following Java source code.
@@ -55,7 +56,7 @@ Source Code:
 
 
 def get_repair_prompt(
-    test_code: str,
+    failed_test_code: str,
     error_output: str,
     source_code: str,
     package_name: str,
@@ -98,7 +99,7 @@ Source under test:
 
 Failing test code:
 ```java
-{test_code}
+{failed_test_code}
 ```
 
 Validation output:
