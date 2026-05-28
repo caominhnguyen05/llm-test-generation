@@ -8,7 +8,6 @@ import requests
 from pipeline.config import PipelineConfig
 from library_prep.pom import create_minimal_pom
 
-
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
 
 
@@ -60,7 +59,6 @@ def download_library_jars(config: PipelineConfig) -> bool:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
 
-    print(f"Downloaded artifacts: {config.library}")
     return True
 
 
