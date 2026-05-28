@@ -46,7 +46,7 @@ def save_log(
     title: str,
     content: str,
 ) -> None:
-    log_dir = get_library_log_dir(config) / class_name
+    log_dir = get_library_log_dir(config) / f"{package_name}.{class_name}"
 
     append_log_entry(
         path=log_dir / filename,
