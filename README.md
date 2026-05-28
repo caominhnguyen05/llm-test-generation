@@ -1,133 +1,149 @@
-# LLM-based test generation pipeline
+# LLM Test Generation Pipeline
 
-## How to Run the Pipeline
+This repository runs an LLM-based pipeline that generates JUnit 4 tests for Maven library classes, validates and repairs those tests, then records JaCoCo coverage and runtime/cost metrics.
 
-### 1. Create virtual environments & install dependencies
+## Setup
 
-Create virtual environment:
+Create and activate a Python virtual environment:
 
 ```bash
 python -m venv .venv
 ```
 
-Activate virtual environment:
-
-- Windows (Command Prompt)
-
-```cmd
-.venv\Scripts\activate
-```
-
-- Windows (PowerShell)
+Windows PowerShell:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-- macOS/Linux
+macOS/Linux:
 
 ```bash
 source .venv/bin/activate
 ```
 
-Install dependencies:
+Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Download libraries and construct Maven projects
+You also need Java and Maven available on your path. The pipeline currently calls `mvn.cmd`, so on non-Windows systems the Maven command may need to be adjusted.
 
-Run:
+For LLM calls:
 
-```bash
-python libraries_builder/download.py
-```
+- `--llm_backend ollama` uses the local Ollama model configured in `llm/config.py`.
+- `--llm_backend openrouter` requires `OPENROUTER_API_KEY` in your environment or `.env`.
 
-This step reads Maven coordinates from: `csv_data/evosuite_results_small.csv`, a sample with 20+ libraries used in EvoSuite baseline.
+## Running Experiments
 
-For each row, it:
-
-- Downloads the artifact `.jar` and `-sources.jar` from Maven Central.
-- Stores both jars under `artifacts/`.
-- Extracts Java source files into `prompt_sources/` for prompting and JaCoCo source mapping.
-- Creates a small Maven test harness whose dependency is the original library coordinate.
-- Adds JUnit, Mockito, Surefire, and a JaCoCo javaagent argLine.
-- Downloads JaCoCo agent and CLI jars into `artifacts/`.
-- Keeps only libraries whose test harness compiles successfully.
-
-### 3. Run the LLM test-generation pipeline
-
-This step generates JUnit 4 tests for a selected Maven library, validates them with Maven, repairs failing tests using the LLM, and records JaCoCo coverage.
-
-Run:
+- Run the pipeline for all sample libraries listed in the CSV (with repair mode):
 
 ```bash
-python main.py --library <group_id>:<artifact_id>:<version>
+python main.py --mode repair --attempts <num_attempts>
 ```
 
-Then choose a mode:
+Replace `<num_attempts>` with the maximum number of repair attempts to allow for each generated test class.
 
-1. Run all Java classes in the selected library
-2. Run one Java class in the selected library
+- Run final experiment on all sample libraries with Ollama:
 
-Available arguments:
+```bash
+python main.py --mode final --attempts 2 --llm_backend ollama
+```
+
+- Run final experiment on all sample libraries with OpenRouter:
+
+```bash
+python main.py --mode final --attempts 2 --llm_backend openrouter
+```
+
+Run one library (for testing/debugging):
+
+```bash
+python main.py --mode repair --attempts <max_attempts> --library <group_id>:<artifact_id>:<version>
+```
+
+### Arguments
 
 ```text
---library         Maven coordinates of the target library.
-                  Example: org.apache.commons:commons-csv:1.8
+--mode          Required. Either repair or final.
+                repair reads csv_data/libraries_repair.csv.
+                final reads csv_data/libraries_final.csv.
 
---libraries-root  Root folder containing prepared library test harnesses.
-                  Default: libraries_test
+--attempts      Required. Maximum number of repair attempts per generated test.
+                Use 0 to run generation without repair.
 
---source          Java file relative to prompt_sources.
-                  Only needed when running one class.
-                  Example: org/apache/commons/csv/CSVParser.java
+--library       Optional. Maven coordinate groupId:artifactId:version.
+                If omitted, all libraries from the mode CSV are processed.
 
---model           Ollama model preset to use.
-                  Default: qwen_coder_small
-
---attempts        Maximum number of repair attempts after a generated test fails.
-                  Default: 2
+--llm_backend   Optional. ollama or openrouter. Default: ollama.
 ```
 
-Example: run all classes in a library:
+If both coverage and cost rows already exist for a library, `main.py` skips that library.
 
-```
-python main.py --library org.apache.commons:commons-csv:1.8
-```
+## What the Pipeline Does
 
-Example: run one class:
+For each library, the pipeline:
 
-```
-python main.py --library org.apache.commons:commons-csv:1.8 --source org/apache/commons/csv/CSVParser.java
-```
+1. Downloads the binary jar and sources jar from Maven Central.
+2. Extracts sources into `prompt_sources/`.
+3. Creates a minimal Maven project with JUnit, Mockito, Surefire, and JaCoCo.
+4. Finds testable Java source files.
+5. Extracts a class API summary with `tools/java-api-extractor`.
+6. Generates a JUnit test with the configured LLM backend.
+7. Validates structure, compilation, and runtime behavior.
+8. Repairs failing tests up to `--attempts`.
+9. Runs coverage after ignoring failing/erroring test methods.
+10. Writes result CSV files.
 
-Example: use a different model and repair limit:
+If a library has a pipeline error such as API extraction failure, coverage and runtime/cost rows are not written for that library. If the pipeline completes but no generated test class compiles, a zero coverage row is written.
 
-```
-python main.py --library org.apache.commons:commons-csv:1.8 --model qwen_coder_small --attempts 3
-```
+## Outputs
 
-To see all options:
+Prepared libraries and generated tests are written under:
 
-```
-python main.py --help
-```
-
-Generated tests are written to:
-
-`<library>/src/test/java/`
-
-Coverage results are appended to:
-
-`csv_data/llm_coverage.csv`
-
-## Run Pipeline with Streamlit UI
-
-```bash
-pip install streamlit
-streamlit run streamlit_app.py
+```text
+libraries_repair_<attempts>/<group_id>/<artifact_id>/<version>/
+libraries_final_<llm_backend>/<group_id>/<artifact_id>/<version>/
 ```
 
-The UI page will then be available at `http://localhost:8501`.
+Generated tests are saved in each prepared Maven project:
+
+```text
+<library_path>/src/test/java/
+```
+
+Experiment logs are written under:
+
+```text
+experiment_logs/repair_<attempts>/<group_id>_<artifact_id>_<version>/
+experiment_logs/final_<llm_backend>/<group_id>_<artifact_id>_<version>/
+```
+
+Result CSV files are written to:
+
+```text
+results/repair/repair_<attempts>/coverage.csv
+results/repair/repair_<attempts>/cost.csv
+results/repair/repair_<attempts>/compile_failures.csv
+results/repair/repair_<attempts>/compile_failures_summary.csv
+
+results/final/<llm_backend>/coverage.csv
+results/final/<llm_backend>/cost.csv
+results/final/<llm_backend>/compile_failures.csv
+results/final/<llm_backend>/compile_failures_summary.csv
+```
+
+## Repository Layout
+
+```text
+main.py                     CLI entry point
+pipeline/                   Orchestration, prompting, validation, metrics
+library_prep/               Maven library download and project setup
+coverage/                   Surefire parsing, failing-test ignoring, JaCoCo rows
+llm/                        Ollama/OpenRouter client and prompts
+tools/java-api-extractor/   Java helper used to summarize public class APIs
+csv_data/                   Input library lists and baseline data
+results/                    Experiment CSV outputs and analysis scripts
+experiment_logs/            Saved prompts, LLM responses, and repair errors
+```
