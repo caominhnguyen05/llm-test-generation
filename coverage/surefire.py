@@ -25,15 +25,15 @@ def read_surefire_test_results(project_path: Path) -> tuple[TestCounts, dict[str
             continue
 
         for testcase in root.iter():
-            if _local_xml_name(testcase.tag) != "testcase":
+            if local_xml_name(testcase.tag) != "testcase":
                 continue
 
             total += 1
             classname = testcase.attrib.get("classname") or root.attrib.get("name", "")
-            test_name = _java_method_name(testcase.attrib.get("name", ""))
-            has_failure = _has_child(testcase, "failure")
-            has_error = _has_child(testcase, "error")
-            has_skip = _has_child(testcase, "skipped")
+            test_name = java_method_name(testcase.attrib.get("name", ""))
+            has_failure = has_child(testcase, "failure")
+            has_error = has_child(testcase, "error")
+            has_skip = has_child(testcase, "skipped")
 
             failed_assertions += int(has_failure)
             runtime_errors += int(has_error)
@@ -51,14 +51,14 @@ def read_surefire_test_results(project_path: Path) -> tuple[TestCounts, dict[str
     ), failing_tests
 
 
-def _java_method_name(testcase_name: str) -> str:
+def java_method_name(testcase_name: str) -> str:
     """Normalize Surefire names such as parameterized testName[0] to Java method names."""
     return testcase_name.split("[", 1)[0].strip()
 
 
-def _local_xml_name(tag: str) -> str:
+def local_xml_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _has_child(element: ET.Element, child_name: str) -> bool:
-    return any(_local_xml_name(child.tag) == child_name for child in element)
+def has_child(element: ET.Element, child_name: str) -> bool:
+    return any(local_xml_name(child.tag) == child_name for child in element)
