@@ -37,13 +37,8 @@ def only_test_class_visible(library_path: Path, test_class: str):
 
 def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
     print(f"\nCompiling test class {test_class}...")
-
-    command = [
-        "mvn.cmd",
-        "-q",
-        "clean",
-        "test-compile",
-    ]
+    
+    command = ["mvn.cmd", "-q", "clean", "test-compile"]
 
     with only_test_class_visible(library_path, test_class):
         result = subprocess.run(
@@ -65,12 +60,7 @@ def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
 def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
     print(f"\nExecuting test class {test_class}...")
 
-    command = [
-        "mvn.cmd",
-        "-q",
-        "test",
-        f"-Dtest={test_class}",
-    ]
+    command = ["mvn.cmd", "-q", "test", f"-Dtest={test_class}"]
 
     with only_test_class_visible(library_path, test_class):
         result = subprocess.run(
