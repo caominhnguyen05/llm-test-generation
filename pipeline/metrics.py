@@ -12,14 +12,14 @@ COST_FIELDNAMES = [
     "group_id",
     "artifact_id",
     "version",
-    "total_classes_under_test",
+    "classes_under_test",
     "total_llm_calls",
     "repair_calls",
     "total_llm_generation_time_seconds",
     "total_pipeline_runtime_seconds",
     "total_prompt_tokens",
     "total_output_tokens",
-    "number_of_repair_attempts",
+    "num_repair_attempts",
 ]
 
 
@@ -61,12 +61,12 @@ class CostMetrics:
         self.record_call(metrics)
 
 
-def append_library_coverage(
+def record_library_coverage(
     config: LibConfig,
     testable_source_files: int,
     generated_test_classes: int,
 ) -> None:
-    """Append the completed library coverage row."""
+    """Run coverage and append a row to the coverage CSV."""
     row = run_coverage_after_ignoring_failures(
         config,
         300,
@@ -77,20 +77,21 @@ def append_library_coverage(
     print(f"Coverage row written to {config.coverage_csv}")
 
 
-def append_library_runtime_metrics(
+def record_library_cost_metrics(
     config: LibConfig,
-    total_classes_under_test: int,
+    classes_under_test: int,
     metrics: CostMetrics,
 ) -> None:
+    """Append a row to the cost CSV."""
     row = library_coordinates(config) | {
-        "total_classes_under_test": str(total_classes_under_test),
+        "classes_under_test": str(classes_under_test),
         "total_llm_calls": str(metrics.total_llm_calls),
         "repair_calls": str(metrics.repair_calls),
         "total_llm_generation_time_seconds": f"{metrics.total_llm_generation_time_ns / 1_000_000_000:.4f}",
         "total_pipeline_runtime_seconds": f"{metrics.total_pipeline_runtime_seconds:.4f}",
         "total_prompt_tokens": str(metrics.total_prompt_tokens),
         "total_output_tokens": str(metrics.total_output_tokens),
-        "number_of_repair_attempts": str(config.attempts),
+        "num_repair_attempts": str(config.attempts),
     }
 
     append_csv_row(config.cost_csv, COST_FIELDNAMES, row)
