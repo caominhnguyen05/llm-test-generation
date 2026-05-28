@@ -3,7 +3,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 from pipeline.metrics import append_csv_row
 from pipeline.validation import ValidationResult
 
@@ -50,7 +50,7 @@ def categorize_compile_error(message: str, stage: str = "compile") -> str:
 
 
 def record_compile_failure(
-    config: PipelineConfig,
+    config: LibConfig,
     source: Path,
     result: ValidationResult,
 ) -> None:
@@ -69,7 +69,7 @@ def record_compile_failure(
     )
 
 
-def write_compile_failure_summary(config: PipelineConfig) -> None:
+def write_compile_failure_summary(config: LibConfig) -> None:
     """Write category counts and percentages from the compile failure detail CSV."""
     if not config.compile_failures_csv.exists():
         return

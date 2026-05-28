@@ -1,5 +1,5 @@
 from pathlib import Path
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
 def save_test(output_test_file: Path, test_code: str) -> None:
@@ -19,7 +19,7 @@ def delete_test(test_file: Path, reason: str) -> None:
         print(f"   Reason: {reason}")
 
 
-def count_generated_tests(config: PipelineConfig) -> int:
+def count_generated_tests(config: LibConfig) -> int:
     if not config.test_folder.exists():
         return 0
 

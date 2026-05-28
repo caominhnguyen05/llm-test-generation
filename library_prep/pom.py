@@ -1,9 +1,9 @@
 from xml.sax.saxutils import escape
 
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
-def minimal_pom_xml(config: PipelineConfig) -> str:
+def minimal_pom_xml(config: LibConfig) -> str:
     group_id = escape(config.group_id)
     artifact_id = escape(config.artifact_id)
     version = escape(config.version)
@@ -74,7 +74,7 @@ def minimal_pom_xml(config: PipelineConfig) -> str:
 """
 
 
-def create_minimal_pom(config: PipelineConfig) -> bool:
+def create_minimal_pom(config: LibConfig) -> bool:
     try:
         config.library_path.mkdir(parents=True, exist_ok=True)
         (config.library_path / "pom.xml").write_text(

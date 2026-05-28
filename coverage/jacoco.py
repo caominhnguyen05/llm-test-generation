@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 
 from coverage.models import TestCounts
-from pipeline.config import PipelineConfig, REPO_ROOT
+from pipeline.config import LibConfig, REPO_ROOT
 
 
 JACOCO_VERSION = "0.8.12"
@@ -34,7 +34,7 @@ def project_relative(project_path: Path, path: Path) -> str:
     return str(path.relative_to(project_path))
 
 
-def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
+def run_jacoco_coverage(config: LibConfig, timeout: int) -> bool:
     project_path = config.library_path
     print(f"Running JaCoCo for {config.library}...")
 
@@ -108,7 +108,7 @@ def run_jacoco_coverage(config: PipelineConfig, timeout: int) -> bool:
 
 
 def build_coverage_row(
-    config: PipelineConfig,
+    config: LibConfig,
     testable_source_files: int,
     generated_test_classes: int,
     test_counts: TestCounts = TestCounts(),
@@ -131,7 +131,7 @@ def build_coverage_row(
 
 
 def empty_coverage_row(
-    config: PipelineConfig,
+    config: LibConfig,
     testable_source_files: int,
     generated_test_classes: int,
     test_counts: TestCounts,

@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import subprocess
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
-def find_testable_sources(config: PipelineConfig) -> list[Path]:
+def find_testable_sources(config: LibConfig) -> list[Path]:
     """Find Java classes that are worth testing in a library."""
     keep = []
     skipped = []
@@ -148,19 +148,22 @@ def check_testability(java_file: Path, source_root: Path) -> Decision:
 def extract_api_summary(
     java_file: Path,
     class_name: str,
-    extractor_dir: Path,
     timeout: int = 30,
 ) -> str:
     java_file = java_file.resolve()
-    extractor_dir = extractor_dir.resolve()
+    extractor_dir = Path("tools/java-api-extractor").resolve()
     mvn_command = "mvn.cmd" if os.name == "nt" else "mvn"
+
+    if not extractor_dir.exists():
+        raise FileNotFoundError(f"Java API extractor folder not found: {extractor_dir}")
 
     result = subprocess.run(
         [
             mvn_command,
             "-q",
+            "compile",
             "exec:java",
-            f'-Dexec.args="{java_file}" {class_name}',
+            f"-Dexec.args={java_file} {class_name}",
         ],
         cwd=extractor_dir,
         capture_output=True,
@@ -169,6 +172,7 @@ def extract_api_summary(
     )
 
     if result.returncode != 0:
-        raise RuntimeError("API extraction failed:\n" + result.stderr.strip())
+        output = (result.stdout + "\n" + result.stderr).strip()
+        raise RuntimeError(f"API extraction failed:\n{output}")
 
     return result.stdout.strip()

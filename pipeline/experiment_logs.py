@@ -2,20 +2,20 @@ from datetime import datetime
 from pathlib import Path
 from shutil import rmtree
 
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
 LOG_ROOT = Path("experiment_logs")
 
 
-def get_library_log_dir(config: PipelineConfig) -> Path:
+def get_library_log_dir(config: LibConfig) -> Path:
     library_name = f"{config.group_id}_{config.artifact_id}_{config.version}"
     if config.mode == "final":
         return LOG_ROOT / f"final_{config.llm_backend}" / library_name
     return LOG_ROOT / f"repair_{config.attempts}" / library_name
 
 
-def clear_library_logs(config: PipelineConfig) -> None:
+def clear_library_logs(config: LibConfig) -> None:
     """Delete existing experiment logs for this library."""
     log_dir = get_library_log_dir(config)
     if log_dir.exists():
@@ -40,7 +40,7 @@ def append_log_entry(
 
 
 def save_log(
-    config: PipelineConfig,
+    config: LibConfig,
     class_name: str,
     package_name: str,
     phase: str,
@@ -61,7 +61,7 @@ def save_log(
 
 
 def save_prompt(
-    config: PipelineConfig,
+    config: LibConfig,
     class_name: str,
     package_name: str,
     phase: str,
@@ -71,7 +71,7 @@ def save_prompt(
 
 
 def save_response(
-    config: PipelineConfig,
+    config: LibConfig,
     class_name: str,
     package_name: str,
     phase: str,
@@ -81,7 +81,7 @@ def save_response(
 
 
 def save_error(
-    config: PipelineConfig,
+    config: LibConfig,
     class_name: str,
     package_name: str,
     phase: str,

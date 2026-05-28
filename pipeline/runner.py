@@ -3,7 +3,7 @@ from pathlib import Path
 from shutil import rmtree
 
 from library_prep.prep_library import prepare_library
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 from pipeline.experiment_logs import clear_library_logs
 from pipeline.failures import record_compile_failure, write_compile_failure_summary
 from pipeline.files import (
@@ -11,7 +11,7 @@ from pipeline.files import (
     save_test,
     count_generated_tests,
 )
-from pipeline.generation import generate_initial_test, generate_repair_test
+from pipeline.generation import create_initial_test, create_repair_test
 from pipeline.metrics import (
     CostMetrics,
     append_library_coverage,
@@ -21,11 +21,7 @@ from pipeline.preprocess import extract_api_summary, extract_package_and_class, 
 from pipeline.validation import validate_compile, validate_structure, validate_test
 
 
-def process_one_source(
-    config: PipelineConfig,
-    source: Path,
-    metrics: CostMetrics,
-) -> str:
+def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) -> str:
     source_file = config.source_folder / source
     source_code = read_java_source(source_file)
     package_name, class_name = extract_package_and_class(source_file, config.source_folder)
@@ -33,13 +29,12 @@ def process_one_source(
     api_summary = extract_api_summary(
         java_file=source_file,
         class_name=class_name,
-        extractor_dir=Path("java-api-extractor"),
     )
 
     test_class = f"{class_name}Test"
     test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
-    test_code = generate_initial_test(
+    test_code = create_initial_test(
         config, source_code, package_name, class_name, api_summary, metrics
     )
 
@@ -78,7 +73,7 @@ def process_one_source(
         print(f"Error: {result.message}")
         print(f"Repair attempt {attempt + 1}/{config.attempts}...")
 
-        test_code = generate_repair_test(
+        test_code = create_repair_test(
             config,
             test_code,
             result.message,
@@ -96,7 +91,7 @@ def print_failure_summary(failures: list[tuple[Path, str]]) -> None:
         print(f"- {source}: {result}")
 
 
-def run_library_pipeline(config: PipelineConfig) -> None:
+def run_library_pipeline(config: LibConfig) -> None:
     """Run the LLM test generation pipeline for one library."""
     # 1. Download and construct library 
     if not prepare_library(config):
@@ -122,6 +117,7 @@ def run_library_pipeline(config: PipelineConfig) -> None:
 
     print(f"\nFound {num_testable} testable Java source files in {config.library}.")
     failures = []
+    had_pipeline_error = False
 
     # 3. Generate, validate, and repair tests for each testable source file
     for index, source in enumerate(testable_sources, start=1):
@@ -131,11 +127,16 @@ def run_library_pipeline(config: PipelineConfig) -> None:
             if result != "success":
                 failures.append((source, result))
         except Exception as exc:
+            had_pipeline_error = True
             failures.append((source, str(exc)))
             print(f"ERROR: failed while processing {source}.")
             print(exc)
 
     print_failure_summary(failures)
+
+    if had_pipeline_error:
+        print(f"Skipping {config.library}: one or more source files failed with a pipeline error.")
+        return
 
     num_generated_tests = count_generated_tests(config)
 

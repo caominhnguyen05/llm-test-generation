@@ -5,11 +5,11 @@ from coverage.ignore_tests import ignore_failing_test_methods
 from coverage.jacoco import build_coverage_row, run_jacoco_coverage
 from coverage.models import TestCounts
 from coverage.surefire import read_surefire_test_results
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
 def run_coverage_after_ignoring_failures(
-    config: PipelineConfig,
+    config: LibConfig,
     timeout: int,
     testable_source_files: int,
     generated_test_classes: int,
@@ -30,7 +30,7 @@ def run_coverage_after_ignoring_failures(
 
 
 def zero_coverage_row(
-    config: PipelineConfig,
+    config: LibConfig,
     testable_source_files: int,
 ) -> dict[str, str]:
     """Return one zero-coverage CSV row when no generated test class compiled."""
@@ -58,7 +58,7 @@ def zero_coverage_row(
     }
 
 
-def collect_failures_and_ignore_tests(config: PipelineConfig, timeout: int) -> TestCounts:
+def collect_failures_and_ignore_tests(config: LibConfig, timeout: int) -> TestCounts:
     """Run tests once, parse Surefire XML, and add @Ignore to failing/erroring methods."""
     print(f"Collecting Surefire failures for {config.library}...", file=sys.stderr)
     result = subprocess.run(

@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
-class PipelineConfig:
+class LibConfig:
     library: str | None
     attempts: int
     mode: str
@@ -68,7 +68,7 @@ class PipelineConfig:
         return self.library_path / "src/test/java"
 
 
-def parse_args() -> PipelineConfig:
+def parse_args() -> LibConfig:
     parser = argparse.ArgumentParser(
         description="Generate and repair JUnit 4 tests for Java classes in downloaded libraries."
     )
@@ -107,7 +107,7 @@ def parse_args() -> PipelineConfig:
 
     args = parser.parse_args()
 
-    return PipelineConfig(
+    return LibConfig(
         library=args.library,
         attempts=args.attempts,
         mode=args.mode,

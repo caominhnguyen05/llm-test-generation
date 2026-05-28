@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pipeline.maven import compile_test, execute_test
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
 @dataclass(frozen=True)
@@ -22,12 +22,12 @@ def validate_structure(test_code: str, test_class: str) -> ValidationResult:
     return ValidationResult(True, "structure")
 
 
-def validate_compile(config: PipelineConfig, test_class: str) -> ValidationResult:
+def validate_compile(config: LibConfig, test_class: str) -> ValidationResult:
     success, output = compile_test(config.library_path, test_class)
     return ValidationResult(success, "compile", output)
 
 
-def validate_test(config: PipelineConfig, test_class: str) -> ValidationResult:
+def validate_test(config: LibConfig, test_class: str) -> ValidationResult:
     """Validate a generated test through compile and runtime checks."""
     compile_result = validate_compile(config, test_class)
     if not compile_result.passed:

@@ -5,7 +5,7 @@ from pathlib import Path
 from coverage.config import FIELDNAMES as COVERAGE_FIELDNAMES
 from coverage.coverage_pipeline import run_coverage_after_ignoring_failures
 from llm.client import LLMCallMetrics
-from pipeline.config import PipelineConfig
+from pipeline.config import LibConfig
 
 
 COST_FIELDNAMES = [
@@ -33,7 +33,7 @@ def append_csv_row(output_path: Path, fieldnames: list[str], row: dict[str, str]
         writer.writerow({fieldname: row.get(fieldname, "") for fieldname in fieldnames})
 
 
-def library_coordinates(config: PipelineConfig) -> dict[str, str]:
+def library_coordinates(config: LibConfig) -> dict[str, str]:
     return {
         "group_id": config.group_id,
         "artifact_id": config.artifact_id,
@@ -62,7 +62,7 @@ class CostMetrics:
 
 
 def append_library_coverage(
-    config: PipelineConfig,
+    config: LibConfig,
     testable_source_files: int,
     generated_test_classes: int,
 ) -> None:
@@ -78,7 +78,7 @@ def append_library_coverage(
 
 
 def append_library_runtime_metrics(
-    config: PipelineConfig,
+    config: LibConfig,
     total_classes_under_test: int,
     metrics: CostMetrics,
 ) -> None:
