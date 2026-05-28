@@ -31,7 +31,7 @@ client = OpenAI(
 )
 
 def generate_llm_response(prompt: str, llm_backend: str) -> tuple[str, LLMCallMetrics]:
-    """Route LLM calls through the backend selected in the pipeline config."""
+    """Route LLM calls through the backend selected in the library config."""
     if llm_backend == "openrouter":
         return generate_llm_response_openrouter(prompt)
     if llm_backend == "ollama":

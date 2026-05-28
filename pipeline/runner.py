@@ -143,7 +143,7 @@ def run_library_pipeline(config: LibConfig) -> None:
 
     num_generated_tests = count_generated_tests(config)
 
-    # 3. Record coverage, failures and cost metrics
+    # 4. Record coverage, failures and cost metrics
     record_library_coverage(config, num_testable, num_generated_tests)
     write_compile_failure_summary(config)
 
