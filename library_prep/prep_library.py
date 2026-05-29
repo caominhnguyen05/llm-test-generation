@@ -1,11 +1,11 @@
 import shutil
-import subprocess
 import zipfile
 from pathlib import Path
 
 import requests
 
 from pipeline.config import LibConfig
+from pipeline.maven_runner import run_maven
 from library_prep.pom import create_minimal_pom
 
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
@@ -88,12 +88,9 @@ def extract_source_jar(config: LibConfig) -> bool:
 
 
 def compile_library(config: LibConfig) -> bool:
-    result = subprocess.run(
-        ["mvn.cmd", "-q", "test-compile"],
+    result = run_maven(
+        ["-q", "test-compile"],
         cwd=config.library_path,
-        capture_output=True,
-        text=True,
-        timeout=300,
     )
 
     if result.returncode == 0:
