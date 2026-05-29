@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from pipeline.maven import compile_test, execute_test
+from pipeline.test_runner import compile_test, execute_test
 from pipeline.config import LibConfig
 
 
