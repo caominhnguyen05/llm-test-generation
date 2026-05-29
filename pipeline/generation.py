@@ -1,4 +1,4 @@
-from llm.client import generate_llm_response
+from llm.client import LLMTimeoutError, generate_llm_response
 from llm.prompts import (
     get_generation_prompt,
     get_repair_prompt,
@@ -6,7 +6,7 @@ from llm.prompts import (
 from pipeline.config import LibConfig
 from pipeline.metrics import CostMetrics
 from pipeline.postprocess import postprocess_test_code
-from pipeline.experiment_logs import save_prompt, save_response, save_error
+from pipeline.experiment_logs import save_prompt, save_response
 
 
 def create_initial_test(
@@ -22,10 +22,16 @@ def create_initial_test(
     prompt = get_generation_prompt(source_code, package_name, class_name, api_summary)
     save_prompt(config, class_name, package_name, "initial", prompt)
 
-    llm_output, call_metrics = generate_llm_response(
-        prompt,
-        config.llm_backend,
-    )
+    try:
+        llm_output, call_metrics = generate_llm_response(
+            prompt,
+            config.llm_backend,
+        )
+    except LLMTimeoutError as exc:
+        save_response(config, class_name, package_name, "initial", exc.partial_output)
+        metrics.record_call(exc.metrics)
+        raise
+
     save_response(config, class_name, package_name, "initial", llm_output)
     
     metrics.record_call(call_metrics)
@@ -49,10 +55,16 @@ def create_repair_test(
     prompt = get_repair_prompt(failed_test_code, error_message, source_code, package_name, class_name, api_summary)
     save_prompt(config, class_name, package_name, phase, prompt)
 
-    llm_output, call_metrics = generate_llm_response(
-        prompt,
-        config.llm_backend,
-    )
+    try:
+        llm_output, call_metrics = generate_llm_response(
+            prompt,
+            config.llm_backend,
+        )
+    except LLMTimeoutError as exc:
+        save_response(config, class_name, package_name, phase, exc.partial_output)
+        metrics.record_repair_call(exc.metrics)
+        raise
+
     save_response(config, class_name, package_name, phase, llm_output)
 
     metrics.record_repair_call(call_metrics)
