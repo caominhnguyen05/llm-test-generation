@@ -16,14 +16,26 @@ from llm.config import (
 from llm.prompts import SYSTEM_PROMPT
 
 
-class LLMGenerationTimeoutError(TimeoutError):
-    pass
-
 @dataclass(frozen=True)
 class LLMCallMetrics:
     total_duration_ns: int = 0
     prompt_tokens: int = 0
     output_tokens: int = 0
+
+
+class LLMTimeoutError(TimeoutError):
+    def __init__(
+        self,
+        message: str,
+        partial_output: str = "",
+        metrics: LLMCallMetrics | None = None,
+    ):
+        super().__init__(message)
+        self.partial_output = partial_output
+        self.metrics = metrics or LLMCallMetrics(
+            total_duration_ns=LLM_TIMEOUT_SECONDS * 1_000_000_000,
+        )
+
 
 client = OpenAI(
     base_url=OPENROUTER_BASE_URL,
@@ -64,8 +76,9 @@ def generate_llm_response_openrouter(
 
     for chunk in response:
         if time.monotonic() - started_at > LLM_TIMEOUT_SECONDS:
-            raise LLMGenerationTimeoutError(
-                f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds"
+            raise LLMTimeoutError(
+                f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds",
+                partial_output=llm_output,
             )
 
         if hasattr(chunk, "usage") and chunk.usage is not None:
@@ -109,7 +122,10 @@ def generate_llm_response_ollama(prompt: str) -> tuple[str, LLMCallMetrics]:
     started_at = time.monotonic()
     for chunk in stream:
         if time.monotonic() - started_at > LLM_TIMEOUT_SECONDS:
-            raise LLMGenerationTimeoutError(f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds")
+            raise LLMTimeoutError(
+                f"LLM generation exceeded {LLM_TIMEOUT_SECONDS} seconds",
+                partial_output=llm_output,
+            )
         if chunk.get("done"):
             metrics = LLMCallMetrics(
                 total_duration_ns=int(chunk.get("total_duration") or 0),
