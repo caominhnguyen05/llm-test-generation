@@ -60,7 +60,7 @@ def zero_coverage_row(
 
 def collect_failures_and_ignore_tests(config: LibConfig, timeout: int) -> TestCounts:
     """Run tests once, parse Surefire XML, and add @Ignore to failing/erroring methods."""
-    print(f"Collecting Surefire failures for {config.library}...", file=sys.stderr)
+    print(f"\nCollecting Surefire failures for {config.library}...")
     result = subprocess.run(
         ["mvn.cmd", "-q", "clean", "test", "-Dmaven.test.failure.ignore=true"],
         cwd=config.library_path,
