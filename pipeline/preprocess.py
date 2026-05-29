@@ -1,9 +1,8 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-import os
-import subprocess
 from pipeline.config import LibConfig
+from pipeline.maven_runner import run_maven
 
 def find_testable_sources(config: LibConfig) -> list[Path]:
     """Find Java classes that are worth testing in a library."""
@@ -152,27 +151,22 @@ def extract_api_summary(
 ) -> str:
     java_file = java_file.resolve()
     extractor_dir = Path("tools/java-api-extractor").resolve()
-    mvn_command = "mvn.cmd" if os.name == "nt" else "mvn"
 
     if not extractor_dir.exists():
         raise FileNotFoundError(f"Java API extractor folder not found: {extractor_dir}")
 
-    result = subprocess.run(
+    result = run_maven(
         [
-            mvn_command,
             "-q",
             "compile",
             "exec:java",
             f"-Dexec.args={java_file} {class_name}",
         ],
         cwd=extractor_dir,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
     )
 
     if result.returncode != 0:
-        output = (result.stdout + "\n" + result.stderr).strip()
-        raise RuntimeError(f"API extraction failed:\n{output}")
+        output = result.stdout + "\n" + result.stderr
+        raise RuntimeError(f"API extraction failed:\n{output.strip()}")
 
     return result.stdout.strip()
