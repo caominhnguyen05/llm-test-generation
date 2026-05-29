@@ -6,6 +6,7 @@ import requests
 
 from coverage.models import TestCounts
 from pipeline.config import LibConfig, REPO_ROOT
+from pipeline.maven_runner import run_maven
 
 
 JACOCO_VERSION = "0.8.12"
@@ -38,18 +39,14 @@ def run_jacoco_coverage(config: LibConfig, timeout: int) -> bool:
     project_path = config.library_path
     print(f"Running JaCoCo for {config.library}...")
 
-    test_result = subprocess.run(
+    test_result = run_maven(
         [
-            "mvn.cmd",
             "-q",
             f"org.jacoco:jacoco-maven-plugin:{JACOCO_VERSION}:prepare-agent",
             "test",
             "-Dmaven.test.failure.ignore=true",
         ],
         cwd=project_path,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
     )
 
     if test_result.returncode != 0:
