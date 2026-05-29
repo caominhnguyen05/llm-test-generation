@@ -28,7 +28,7 @@ Install Python dependencies:
 pip install -r requirements.txt
 ```
 
-You also need Java and Maven available on your path. The pipeline currently calls `mvn.cmd`, so on non-Windows systems the Maven command may need to be adjusted.
+You also need Java and Maven available on your path. The pipeline selects `mvn.cmd` on Windows and `mvn` on macOS/Linux.
 
 For LLM calls:
 
