@@ -147,7 +147,6 @@ def check_testability(java_file: Path, source_root: Path) -> Decision:
 def extract_api_summary(
     java_file: Path,
     class_name: str,
-    timeout: int = 30,
 ) -> str:
     java_file = java_file.resolve()
     extractor_dir = Path("tools/java-api-extractor").resolve()
