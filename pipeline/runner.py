@@ -3,6 +3,7 @@ from pathlib import Path
 from shutil import rmtree
 
 from library_prep.prep_library import prepare_library
+from llm.client import LLMTimeoutError
 from pipeline.config import LibConfig
 from pipeline.experiment_logs import clear_library_logs, save_error
 from pipeline.failures import record_compile_failure, write_compile_failure_summary
@@ -34,9 +35,14 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
     test_class = f"{class_name}Test"
     test_file = config.test_folder / package_name.replace(".", "/") / f"{test_class}.java"
 
-    test_code = create_initial_test(
-        config, source_code, package_name, class_name, api_summary, metrics
-    )
+    try:
+        test_code = create_initial_test(
+            config, source_code, package_name, class_name, api_summary, metrics
+        )
+    except LLMTimeoutError as exc:
+        save_error(config, class_name, package_name, "initial", str(exc))
+        print(f"LLM generation timed out for {test_class}; skipping this source file.")
+        return "llm generation timeout"
 
     for attempt in range(config.attempts + 1):
         phase = f"attempt_{attempt}"
@@ -78,17 +84,26 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
         print(f"Error: {result.message}")
         print(f"Repair attempt {attempt + 1}/{config.attempts}...")
 
-        test_code = create_repair_test(
-            config,
-            test_code,
-            result.message,
-            source_code,
-            package_name,
-            class_name,
-            api_summary,
-            metrics,
-            attempt + 1,
-        )
+        try:
+            test_code = create_repair_test(
+                config,
+                test_code,
+                result.message,
+                source_code,
+                package_name,
+                class_name,
+                api_summary,
+                metrics,
+                attempt + 1,
+            )
+        except LLMTimeoutError as exc:
+            phase = f"repair_{attempt + 1}"
+            save_error(config, class_name, package_name, phase, str(exc))
+            if result.stage == "compile":
+                record_compile_failure(config, source, result)
+                delete_test(test_file, "repair generation timed out after compile failure")
+            print(f"LLM repair timed out for {test_class}; skipping this source file.")
+            return "llm repair timeout"
 
 def print_failure_summary(failures: list[tuple[Path, str]]) -> None:
     print(f"\nCompleted with {len(failures)} failed source file(s).")
