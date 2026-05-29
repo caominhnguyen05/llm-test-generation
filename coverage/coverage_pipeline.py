@@ -1,4 +1,3 @@
-import subprocess
 import sys
 
 from coverage.ignore_tests import ignore_failing_test_methods
@@ -6,6 +5,7 @@ from coverage.jacoco import build_coverage_row, run_jacoco_coverage
 from coverage.models import TestCounts
 from coverage.surefire import read_surefire_test_results
 from pipeline.config import LibConfig
+from pipeline.maven_runner import run_maven
 
 
 def run_coverage_after_ignoring_failures(
@@ -61,12 +61,9 @@ def zero_coverage_row(
 def collect_failures_and_ignore_tests(config: LibConfig, timeout: int) -> TestCounts:
     """Run tests once, parse Surefire XML, and add @Ignore to failing/erroring methods."""
     print(f"\nCollecting Surefire failures for {config.library}...")
-    result = subprocess.run(
-        ["mvn.cmd", "-q", "clean", "test", "-Dmaven.test.failure.ignore=true"],
+    result = run_maven(
+        ["-q", "clean", "test", "-Dmaven.test.failure.ignore=true"],
         cwd=config.library_path,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
     )
 
     if result.returncode != 0:
