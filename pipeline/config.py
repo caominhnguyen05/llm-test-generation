@@ -60,6 +60,10 @@ class LibConfig:
         return self.libraries_root / self.group_id / self.artifact_id / self.version
 
     @property
+    def local_maven_repo(self) -> Path:
+        return self.library_path / ".m2-repository"
+
+    @property
     def source_folder(self) -> Path:
         return self.library_path / "prompt_sources"
 
