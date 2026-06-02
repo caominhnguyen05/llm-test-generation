@@ -1,3 +1,4 @@
+group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,testable_source_files,generated_test_classes,compilation_success_rate,tests_total,tests_passed,tests_failed_assertions,tests_runtime_errors,runtime_success_rate,failed_assertion_rate,runtime_error_rate
 aopalliance,aopalliance,1.0,LLM,100.00,,100.00,100.00,100.00,100.00,3,2,0.6667,15,15,0,0,1.0000,0.0000,0.0000
 com.fasterxml.jackson.core,jackson-annotations,2.9.0,LLM,11.14,10.68,12.23,13.41,17.48,31.03,5,4,0.8000,74,74,0,0,1.0000,0.0000,0.0000
 com.fasterxml.jackson.jaxrs,jackson-jaxrs-json-provider,2.9.8,LLM,37.99,26.32,38.05,28.57,41.18,66.67,5,3,0.6000,16,14,0,2,0.8750,0.0000,0.1250
@@ -8,7 +9,6 @@ commons-cli,commons-cli,1.2,LLM,89.18,80.41,91.05,80.35,93.63,100.00,19,19,1.000
 commons-fileupload,commons-fileupload,1.4,LLM,61.26,60.82,57.34,51.70,51.46,53.85,23,15,0.6522,234,234,0,0,1.0000,0.0000,0.0000
 commons-logging,commons-logging,1.2,LLM,40.41,31.69,43.76,34.86,59.93,74.07,13,7,0.5385,147,147,0,0,1.0000,0.0000,0.0000
 commons-pool,commons-pool,1.6,LLM,61.04,53.21,60.87,49.39,61.29,65.22,16,15,0.9375,370,369,1,0,0.9973,0.0027,0.0000
-group_id,artifact_id,version,source,instruction_coverage,branch_coverage,line_coverage,complexity_coverage,method_coverage,class_coverage,testable_source_files,generated_test_classes,compilation_success_rate,tests_total,tests_passed,tests_failed_assertions,tests_runtime_errors,runtime_success_rate,failed_assertion_rate,runtime_error_rate
 io.grpc,grpc-protobuf,1.62.2,LLM,14.84,0.00,17.02,21.74,33.33,50.00,1,1,1.0000,11,11,0,0,1.0000,0.0000,0.0000
 io.grpc,grpc-context,1.27.2,LLM,77.29,68.54,80.52,69.41,85.38,90.48,4,4,1.0000,82,81,1,0,0.9878,0.0122,0.0000
 io.jsonwebtoken,jjwt-jackson,0.11.2,LLM,100.00,83.33,100.00,93.75,100.00,100.00,2,2,1.0000,21,21,0,0,1.0000,0.0000,0.0000
