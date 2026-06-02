@@ -31,3 +31,4 @@ libraries_repair_*/
 libraries_final_*/
 experiment_logs/
 results/figures/
+csv_data/small_libraries.csv
