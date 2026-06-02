@@ -47,6 +47,7 @@ def run_jacoco_coverage(config: LibConfig, timeout: int) -> bool:
             "-Dmaven.test.failure.ignore=true",
         ],
         cwd=project_path,
+        local_repo=config.local_maven_repo,
     )
 
     if test_result.returncode != 0:
