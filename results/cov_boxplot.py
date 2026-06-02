@@ -122,7 +122,7 @@ def main() -> None:
     df = df.merge(common_libraries, on=KEY_COLUMNS, how="inner")
     df = df[KEY_COLUMNS + COVERAGE_COLUMNS + ["source"]]
 
-    output_dir = root_dir / "results" / "coverage"
+    output_dir = root_dir / "results" / "figures"
     output_dir.mkdir(exist_ok=True)
 
     summary_stats = df.groupby("source")[COVERAGE_COLUMNS].agg(["mean", "median"])
