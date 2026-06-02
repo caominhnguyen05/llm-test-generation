@@ -1,5 +1,6 @@
 import shutil
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -11,18 +12,14 @@ from library_prep.pom import create_minimal_pom
 MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2"
 
 
-def artifact_filename(config: LibConfig, suffix: str = "") -> str:
-    return f"{config.artifact_id}-{config.version}{suffix}.jar"
+@dataclass(frozen=True)
+class MavenArtifactFile:
+    path: Path
+    url: str
 
 
-def artifact_path(config: LibConfig, suffix: str = "") -> Path:
-    return config.library_path / "artifacts" / artifact_filename(config, suffix)
-
-
-def artifact_url(config: LibConfig, suffix: str = "") -> str:
+def maven_central_artifact_url(config: LibConfig, filename: str) -> str:
     group_path = config.group_id.replace(".", "/")
-    filename = artifact_filename(config, suffix)
-
     return (
         f"{MAVEN_CENTRAL_URL}/"
         f"{group_path}/"
@@ -32,28 +29,48 @@ def artifact_url(config: LibConfig, suffix: str = "") -> str:
     )
 
 
+def artifact_file(config: LibConfig, filename: str) -> MavenArtifactFile:
+    return MavenArtifactFile(
+        path=config.library_path / "artifacts" / filename,
+        url=maven_central_artifact_url(config, filename),
+    )
+
+
+def library_jar_artifact(config: LibConfig) -> MavenArtifactFile:
+    return artifact_file(config, f"{config.artifact_id}-{config.version}.jar")
+
+
+def source_jar_artifact(config: LibConfig) -> MavenArtifactFile:
+    return artifact_file(config, f"{config.artifact_id}-{config.version}-sources.jar")
+
+
+def pom_artifact(config: LibConfig) -> MavenArtifactFile:
+    return artifact_file(config, f"{config.artifact_id}-{config.version}.pom")
+
+
 def delete_library(config: LibConfig, reason: str) -> None:
     if config.library_path.exists():
         shutil.rmtree(config.library_path)
         print(f"Deleted {config.library_path}: {reason}")
 
 
-def download_library_jars(config: LibConfig) -> bool:
-    artifacts = ["", "-sources"]
+def download_artifacts(config: LibConfig) -> bool:
+    artifacts = [
+        library_jar_artifact(config),
+        source_jar_artifact(config),
+        pom_artifact(config),
+    ]
     downloads: list[tuple[Path, bytes]] = []
 
-    for suffix in artifacts:
-        url = artifact_url(config, suffix)
-        path = artifact_path(config, suffix)
-
+    for artifact in artifacts:
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(artifact.url, timeout=30)
             response.raise_for_status()
         except requests.RequestException as exc:
-            print(f"Failed to download {url}: {exc}")
+            print(f"Failed to download {artifact.url}: {exc}")
             return False
 
-        downloads.append((path, response.content))
+        downloads.append((artifact.path, response.content))
 
     for path, content in downloads:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -62,8 +79,26 @@ def download_library_jars(config: LibConfig) -> bool:
     return True
 
 
+def install_library_in_local_repo(config: LibConfig) -> bool:
+    jar_artifact = library_jar_artifact(config)
+    pom = pom_artifact(config)
+    config.local_maven_repo.mkdir(parents=True, exist_ok=True)
+
+    result = run_maven(
+        [
+            "-q",
+            "org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file",
+            f"-Dfile={jar_artifact.path.resolve()}",
+            f"-DpomFile={pom.path.resolve()}",
+            f"-DlocalRepositoryPath={config.local_maven_repo.resolve()}",
+        ],
+        cwd=config.library_path,
+    )
+    return result.returncode == 0
+
+
 def extract_source_jar(config: LibConfig) -> bool:
-    source_jar = artifact_path(config, "-sources")
+    source_jar = source_jar_artifact(config).path
     prompt_sources = config.source_folder
 
     try:
@@ -91,29 +126,28 @@ def compile_library(config: LibConfig) -> bool:
     result = run_maven(
         ["-q", "test-compile"],
         cwd=config.library_path,
+        local_repo=config.local_maven_repo,
     )
 
     if result.returncode == 0:
         return True
 
-    output = result.stdout + "\n" + result.stderr
-
     print(f"Compile failed: {config.library}")
-    print(output.strip()[-4000:])
-
+    print(f"{result.stdout}\n{result.stderr}")
     return False
 
 
 def prepare_library(config: LibConfig) -> bool:
     print(f"\nPreparing library: {config.library}")
 
-    if config.library_path.exists():
+    if config.library_path.exists() and config.source_folder.exists():
         print(f"Already prepared.")
         return True
 
     steps = [
-        ("- Downloading artifacts", download_library_jars),
+        ("- Downloading artifacts", download_artifacts),
         ("- Extracting source jar", extract_source_jar),
+        ("- Installing artifact into isolated Maven repo", install_library_in_local_repo),
         ("- Creating minimal pom.xml", create_minimal_pom),
         ("- Compiling library", compile_library),
     ]
