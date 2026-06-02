@@ -41,21 +41,33 @@ def load_coverage_csv(path: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    root_dir = Path(__file__).resolve().parents[2]
+    root_dir = Path(__file__).resolve().parents[1]
 
     # Load CSV files
-    llm = load_coverage_csv(root_dir / "results" / "coverage_ollama" / "coverage_repair_2.csv")
+    qwen = load_coverage_csv(root_dir / "results" / "final" / "ollama" / "coverage.csv")
+    deepseek = load_coverage_csv(
+        root_dir / "results" / "final" / "openrouter" / "coverage.csv"
+    )
     evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_original.csv")
 
-    # Find libraries that exist in both CSV files.
-    common_libraries = llm[KEY_COLUMNS].drop_duplicates().merge(
+    qwen["source"] = "Qwen 2.5-Coder-7B"
+    deepseek["source"] = "Deepseek V4 Flash"
+    evosuite["source"] = "EvoSuite"
+
+    # Find libraries that exist in all CSV files.
+    common_libraries = qwen[KEY_COLUMNS].drop_duplicates().merge(
+        deepseek[KEY_COLUMNS].drop_duplicates(), on=KEY_COLUMNS
+    )
+    common_libraries = common_libraries.merge(
         evosuite[KEY_COLUMNS].drop_duplicates(), on=KEY_COLUMNS
     )
 
     if common_libraries.empty:
-        raise ValueError("No matching rows found between LLM and EvoSuite CSV files.")
+        raise ValueError(
+            "No matching rows found across qwen, Deepseek, and EvoSuite CSV files."
+        )
 
-    df = pd.concat([llm, evosuite], ignore_index=True)
+    df = pd.concat([qwen, deepseek, evosuite], ignore_index=True)
     df = df.merge(common_libraries, on=KEY_COLUMNS, how="inner")
 
     # Keep only the columns needed for summary and plotting.
@@ -72,42 +84,36 @@ def main() -> None:
         f.write(summary.to_latex())
 
     # Create grouped bar chart from median coverage values.
-    plt.figure(figsize=(11, 6))
+    plt.figure(figsize=(11, 5.4))
 
     metrics = list(METRIC_LABELS.values())
     x_positions = list(range(len(COVERAGE_COLUMNS)))
-    bar_width = 0.36
+    bar_width = 0.26
+    series_order = ["Qwen 2.5-Coder-7B", "Deepseek V4 Flash", "EvoSuite"]
 
     colors = {
-        "LLM": "#4C72B0",
-        "EVOSUITE": "#DD8452",
+        "Qwen 2.5-Coder-7B": "#4C72B0",
+        "Deepseek V4 Flash": "#55A868",
+        "EvoSuite": "#DD8452",
     }
 
     median_coverage = df.groupby("source")[COVERAGE_COLUMNS].median()
-    llm_values = [median_coverage.loc["LLM", column] for column in COVERAGE_COLUMNS]
-    evosuite_values = [
-        median_coverage.loc["EVOSUITE", column] for column in COVERAGE_COLUMNS
-    ]
+    offsets = [-bar_width, 0, bar_width]
+    all_bars = []
 
-    llm_positions = [x - bar_width / 2 for x in x_positions]
-    evosuite_positions = [x + bar_width / 2 for x in x_positions]
+    for source, offset in zip(series_order, offsets):
+        values = [median_coverage.loc[source, column] for column in COVERAGE_COLUMNS]
+        positions = [x + offset for x in x_positions]
+        bars = plt.bar(
+            positions,
+            values,
+            width=bar_width,
+            color=colors[source],
+            label=source,
+        )
+        all_bars.append(bars)
 
-    llm_bars = plt.bar(
-        llm_positions,
-        llm_values,
-        width=bar_width,
-        color=colors["LLM"],
-        label="LLM",
-    )
-    evosuite_bars = plt.bar(
-        evosuite_positions,
-        evosuite_values,
-        width=bar_width,
-        color=colors["EVOSUITE"],
-        label="EvoSuite",
-    )
-
-    for bars in [llm_bars, evosuite_bars]:
+    for bars in all_bars:
         for bar in bars:
             height = bar.get_height()
             plt.text(
@@ -116,26 +122,21 @@ def main() -> None:
                 f"{height:.1f}",
                 ha="center",
                 va="bottom",
-                fontsize=10,
+                fontsize=12,
             )
 
-    plt.xticks(x_positions, metrics, rotation=45, ha="right", fontsize=13)
-    plt.legend(title="Approach", fontsize=12, title_fontsize=13)
+    plt.xticks(x_positions, metrics, rotation=45, ha="right", fontsize=15)
+    plt.legend(fontsize=12, title_fontsize=13)
 
-    plt.ylabel("Coverage (%)", fontsize=14)
+    plt.ylabel("Coverage (%)", fontsize=15)
     plt.ylim(0, 110)
-    plt.title(
-        f"Median Coverage: LLM vs EvoSuite tests ({len(common_libraries)} libraries)",
-        fontsize=15,
-    )
     plt.tight_layout()
 
-    # plt.savefig(output_dir / "coverage_bar_chart.pdf")
-    plt.savefig(output_dir / "coverage_bar_chart.png", dpi=300)
+    plt.savefig(output_dir / "coverage_bar_chart.pdf")
     plt.close()
 
-    print(f"\nMatched {len(common_libraries)} of {len(llm)} LLM row(s).")
-    print(f"Saved plot to {output_dir / 'coverage_bar_chart.png'}")
+    print(f"\nMatched {len(common_libraries)} libraries across all CSV files.")
+    print(f"Saved plot to {output_dir / 'coverage_bar_chart.pdf'}")
     print(f"Saved summary to {output_dir / 'coverage_summary_table.csv'}")
 
 
