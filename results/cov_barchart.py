@@ -73,15 +73,8 @@ def main() -> None:
     # Keep only the columns needed for summary and plotting.
     df = df[KEY_COLUMNS + COVERAGE_COLUMNS + ["source"]]
 
-    # Generate median summary table.
-    summary = df.groupby("source")[COVERAGE_COLUMNS].median().round(2)
-
-    output_dir = root_dir / "results" / "coverage"
+    output_dir = root_dir / "results" / "figures"
     output_dir.mkdir(exist_ok=True)
-    # summary.to_csv(output_dir / "coverage_summary_table.csv")
-
-    with open(output_dir / "coverage_summary_table.tex", "w", encoding="utf-8") as f:
-        f.write(summary.to_latex())
 
     # Create grouped bar chart from median coverage values.
     plt.figure(figsize=(11, 5.4))
@@ -127,17 +120,15 @@ def main() -> None:
 
     plt.xticks(x_positions, metrics, rotation=45, ha="right", fontsize=15)
     plt.legend(fontsize=12, title_fontsize=13)
-
     plt.ylabel("Coverage (%)", fontsize=15)
     plt.ylim(0, 110)
     plt.tight_layout()
 
-    plt.savefig(output_dir / "coverage_bar_chart.pdf")
+    plt.savefig(output_dir / "sq4_barchart.pdf")
     plt.close()
 
     print(f"\nMatched {len(common_libraries)} libraries across all CSV files.")
-    print(f"Saved plot to {output_dir / 'coverage_bar_chart.pdf'}")
-    print(f"Saved summary to {output_dir / 'coverage_summary_table.csv'}")
+    print(f"Saved plot to {output_dir / 'sq4_barchart.pdf'}")
 
 
 if __name__ == "__main__":
