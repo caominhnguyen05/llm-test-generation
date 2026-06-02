@@ -41,7 +41,7 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
         )
     except LLMTimeoutError as exc:
         save_error(config, class_name, package_name, "initial", str(exc))
-        print(f"LLM generation timed out for {test_class}; skipping this source file.")
+        print(f"\nLLM generation timed out for {test_class}; skipping this source file.")
         return "llm generation timeout"
 
     for attempt in range(config.attempts + 1):
@@ -51,14 +51,19 @@ def process_one_source(config: LibConfig, source: Path, metrics: CostMetrics) ->
             save_error(config, class_name, package_name, phase, structure_result.message)
 
             print(f"Structure check failed for {test_class}: {structure_result.message}")
-            record_compile_failure(config, source, structure_result)
 
-            if test_file.exists():
-                compile_result = validate_compile(config, test_class)
-                if not compile_result.passed:
-                    delete_test(test_file, "structure validation failed and saved test does not compile")
+            if not test_file.exists():
+                record_compile_failure(config, source, structure_result)
+                return "structure check failed"
 
-            return "structure check failed"
+            compile_result = validate_compile(config, test_class)
+
+            if not compile_result.passed:
+                record_compile_failure(config, source, compile_result)
+                delete_test(test_file, "structure validation failed and saved test does not compile")
+                return "compile validation failed"
+
+            return "runtime validation failed and repair attempt fails structure check"
 
         save_test(test_file, test_code)
         result = validate_test(config, test_class)
