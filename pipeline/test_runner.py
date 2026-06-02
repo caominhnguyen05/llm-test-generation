@@ -8,6 +8,10 @@ from pipeline.maven_runner import run_maven
 MAX_ERROR_CHARS = 6000
 
 
+def local_maven_repo(library_path: Path) -> Path:
+    return library_path / ".m2-repository"
+
+
 @contextmanager
 def only_test_class_visible(library_path: Path, test_class: str):
     test_root = library_path / "src/test/java"
@@ -42,6 +46,7 @@ def compile_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         result = run_maven(
             ["-q", "clean", "test-compile"],
             cwd=library_path,
+            local_repo=local_maven_repo(library_path),
         )
 
     if result.returncode == 0:
@@ -59,6 +64,7 @@ def execute_test(library_path: Path, test_class: str) -> tuple[bool, str]:
         result = run_maven(
             ["-q", "test", f"-Dtest={test_class}"],
             cwd=library_path,
+            local_repo=local_maven_repo(library_path),
         )
 
     output = result.stdout + "\n" + result.stderr
