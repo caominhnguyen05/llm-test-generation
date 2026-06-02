@@ -13,10 +13,16 @@ def get_maven_command() -> str:
 def run_maven(
     args: Sequence[str],
     cwd: Path,
+    local_repo: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run Maven with the platform-specific executable."""
+    command = [get_maven_command()]
+    if local_repo is not None:
+        command.append(f"-Dmaven.repo.local={local_repo.resolve()}")
+    command.extend(args)
+
     return subprocess.run(
-        [get_maven_command(), *args],
+        command,
         cwd=cwd,
         capture_output=True,
         text=True,
