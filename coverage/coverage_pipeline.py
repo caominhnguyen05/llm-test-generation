@@ -18,7 +18,7 @@ def run_coverage_after_ignoring_failures(
     if generated_test_classes == 0:
         return zero_coverage_row(config, testable_source_files)
 
-    test_counts = collect_failures_and_ignore_tests(config, timeout)
+    test_counts = collect_failures_and_ignore_tests(config)
     run_jacoco_coverage(config, timeout)
 
     return build_coverage_row(
@@ -58,12 +58,13 @@ def zero_coverage_row(
     }
 
 
-def collect_failures_and_ignore_tests(config: LibConfig, timeout: int) -> TestCounts:
+def collect_failures_and_ignore_tests(config: LibConfig) -> TestCounts:
     """Run tests once, parse Surefire XML, and add @Ignore to failing/erroring methods."""
     print(f"\nCollecting Surefire failures for {config.library}...")
     result = run_maven(
         ["-q", "clean", "test", "-Dmaven.test.failure.ignore=true"],
         cwd=config.library_path,
+        local_repo=config.local_maven_repo,
     )
 
     if result.returncode != 0:
