@@ -164,6 +164,9 @@ def main() -> None:
     )
 
     table_path = output_dir / "coverage_summary_table.tex"
+    plot_path = output_dir / "coverage_boxplot.pdf"
+
+
     with open(table_path, "w", encoding="utf-8") as f:
         f.write("\n".join(latex_lines))
         f.write("\n")
@@ -255,7 +258,7 @@ def main() -> None:
     plt.tight_layout(rect=(0, 0, 0.84, 1))
 
     plt.savefig(
-        output_dir / "coverage_boxplot.pdf",
+        plot_path,
         bbox_inches="tight",
         pad_inches=0.03,
     )
@@ -263,7 +266,7 @@ def main() -> None:
 
     print(f"\nMatched {len(common_libraries)} of {len(llm)} LLM row(s).")
     print_line_branch_winners(llm_csv, evosuite_csv)
-    print(f"Saved plot to {output_dir / 'coverage_boxplot.pdf'}")
+    print(f"Saved plot to {plot_path}")
     print(f"Saved summary to {table_path}")
 
 
