@@ -1,8 +1,13 @@
-# LLM Test Generation Pipeline
+# LLM-based Test Generation Pipeline
 
-This repository runs an LLM-based pipeline that generates JUnit 4 tests for Maven library classes, validates and repairs those tests, then records JaCoCo coverage and runtime/cost metrics.
+This repository contains the implementation and experimental framework used in the Bachelor's thesis project to evaluate LLM-based unit test generation for Java libraries. The pipeline generates JUnit 4 test suites, validates and repairs generated tests, and records code coverage, test validity, runtime, and cost metrics.
 
-## Setup
+## Prerequisites
+
+- Python 3.10+
+- Java (JDK 8 or later)
+- Maven
+- Ollama (for local model experiments)
 
 Create and activate a Python virtual environment:
 
@@ -22,46 +27,60 @@ macOS/Linux:
 source .venv/bin/activate
 ```
 
-Install Python dependencies:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-You also need Java and Maven available on your path. The pipeline selects `mvn.cmd` on Windows and `mvn` on macOS/Linux.
-
-For LLM calls:
+## LLM Backends
 
 - `--llm_backend ollama` uses the local Ollama model configured in `llm/config.py`.
-- `--llm_backend openrouter` requires `OPENROUTER_API_KEY` in your environment or `.env`.
+- `--llm_backend openrouter` requires `OPENROUTER_API_KEY` environment variable to be set in `.env`.
 
-## Running Experiments
+## Reproducing Experimental Results
 
-- Run the pipeline for all sample libraries listed in the CSV (with repair mode):
+The following commands reproduce the experiments for each sub-question.
 
-```bash
-python main.py --mode repair --attempts <num_attempts>
-```
+### SQ1 & SQ2: Coverage & Test Validity Evaluation
 
-Replace `<num_attempts>` with the maximum number of repair attempts to allow for each generated test class.
-
-- Run final experiment on all sample libraries with Ollama:
+Run the pipeline using the local model via Ollama with 2 repair attempts:
 
 ```bash
-python main.py --mode final --attempts 2 --llm_backend ollama
+python main.py --mode final --attempts 2
 ```
 
-- Run final experiment on all sample libraries with OpenRouter:
+### SQ3: Effect of Iterative Repair
+
+Run the pipeline four times with different maximum numbers of repair attempts:
+
+```bash
+python main.py --mode repair --attempts 0
+```
+
+```bash
+python main.py --mode repair --attempts 1
+```
+
+```bash
+python main.py --mode repair --attempts 2
+```
+
+```bash
+python main.py --mode repair --attempts 3
+```
+
+### SQ4: Local Model vs. Cloud-Hosted Model Comparison
+
+The local-model results used in this comparison are the same results generated for SQ1 and SQ2. If you have already run the SQ1/SQ2 experiment, no additional Ollama run is required.
+
+To obtain the cloud-hosted model results via OpenRouter, run:
 
 ```bash
 python main.py --mode final --attempts 2 --llm_backend openrouter
 ```
 
-Run one library (for testing/debugging):
-
-```bash
-python main.py --mode repair --attempts <max_attempts> --library <group_id>:<artifact_id>:<version>
-```
+Note that you need an OpenRouter API Key set in `.env` file to run the SQ4 experiment with OpenRouter.
 
 ### Arguments
 
@@ -79,7 +98,9 @@ python main.py --mode repair --attempts <max_attempts> --library <group_id>:<art
 --llm_backend   Optional. ollama or openrouter. Default: ollama.
 ```
 
-If both coverage and cost rows already exist for a library, `main.py` skips that library.
+## Incremental Execution
+
+The pipeline automatically skips libraries that already have both coverage and cost results recorded. This allows interrupted experiments to be resumed safely.
 
 ## What the Pipeline Does
 
@@ -100,38 +121,24 @@ If a library has a pipeline error such as API extraction failure, coverage and r
 
 ## Outputs
 
-Prepared libraries and generated tests are written under:
+Results are written to:
 
 ```text
-libraries_repair_<attempts>/<group_id>/<artifact_id>/<version>/
-libraries_final_<llm_backend>/<group_id>/<artifact_id>/<version>/
+results/final/<llm_backend>/
+results/repair/repair_<attempts>/
 ```
 
-Generated tests are saved in each prepared Maven project:
+Generated tests and prepared Maven projects are stored under:
 
 ```text
-<library_path>/src/test/java/
+libraries_final_<llm_backend>/
+libraries_repair_<attempts>/
 ```
 
-Experiment logs are written under:
+Execution logs, prompts, LLM responses, and repair traces are written to:
 
 ```text
-experiment_logs/repair_<attempts>/<group_id>_<artifact_id>_<version>/
-experiment_logs/final_<llm_backend>/<group_id>_<artifact_id>_<version>/
-```
-
-Result CSV files are written to:
-
-```text
-results/repair/repair_<attempts>/coverage.csv
-results/repair/repair_<attempts>/cost.csv
-results/repair/repair_<attempts>/compile_failures.csv
-results/repair/repair_<attempts>/compile_failures_summary.csv
-
-results/final/<llm_backend>/coverage.csv
-results/final/<llm_backend>/cost.csv
-results/final/<llm_backend>/compile_failures.csv
-results/final/<llm_backend>/compile_failures_summary.csv
+experiment_logs/
 ```
 
 ## Repository Layout
@@ -144,6 +151,6 @@ coverage/                   Surefire parsing, failing-test ignoring, JaCoCo rows
 llm/                        Ollama/OpenRouter client and prompts
 tools/java-api-extractor/   Java helper used to summarize public class APIs
 csv_data/                   Input library lists and baseline data
-results/                    Experiment CSV outputs and analysis scripts
+results/                    Experiment CSV outputs and analysis/plotting scripts
 experiment_logs/            Saved prompts, LLM responses, and repair errors
 ```
