@@ -32,3 +32,4 @@ libraries_final_*/
 experiment_logs/
 results/figures/
 csv_data/small_libraries.csv
+llm_tests/

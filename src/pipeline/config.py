@@ -13,7 +13,9 @@ class LibConfig:
 
     @property
     def libraries_csv(self) -> Path:
-        return REPO_ROOT / "csv_data" / f"libraries_{self.mode}.csv"
+        if self.mode == "final":
+            return REPO_ROOT / "datasets" / "sample_34_libraries.csv"
+        return REPO_ROOT / "datasets" / "sample_20_libraries.csv"
 
     @property
     def libraries_root(self) -> Path:
