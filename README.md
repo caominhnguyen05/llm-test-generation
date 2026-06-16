@@ -48,7 +48,7 @@ The following commands reproduce the experiments for each sub-question.
 Run the pipeline using the local model via Ollama with 2 repair attempts:
 
 ```bash
-python src/main.py --mode final --attempts 2
+python src/main.py --attempts 2
 ```
 
 ### SQ3: Effect of Iterative Repair
@@ -56,19 +56,19 @@ python src/main.py --mode final --attempts 2
 Run the pipeline four times with different maximum numbers of repair attempts:
 
 ```bash
-python src/main.py --mode repair --attempts 0
+python src/main.py --repair --attempts 0
 ```
 
 ```bash
-python src/main.py --mode repair --attempts 1
+python src/main.py --repair --attempts 1
 ```
 
 ```bash
-python src/main.py --mode repair --attempts 2
+python src/main.py --repair --attempts 2
 ```
 
 ```bash
-python src/main.py --mode repair --attempts 3
+python src/main.py --repair --attempts 3
 ```
 
 ### SQ4: Local Model vs. Cloud-Hosted Model Comparison
@@ -78,7 +78,7 @@ The local-model results used in this comparison are the same results generated i
 To obtain the cloud-hosted model results via OpenRouter, run:
 
 ```bash
-python src/main.py --mode final --attempts 2 --llm_backend openrouter
+python src/main.py --attempts 2 --llm_backend openrouter
 ```
 
 Note that you need an OpenRouter API Key set in `.env` file to run the SQ4 experiment with OpenRouter.
@@ -167,7 +167,7 @@ generated_tests/
 └── tests_repair_<attempts>/
 ```
 
-### Logs and Intermediate Artifacts
+### Experimental logs
 
 Execution logs, generation/repair prompts, and raw LLM responses are written to:
 
@@ -175,7 +175,7 @@ Execution logs, generation/repair prompts, and raw LLM responses are written to:
 experiment_logs/
 ```
 
-These files are useful for inspecting individual experiment runs and diagnosing failures.
+These files are useful for inspecting individual experiment runs and analysing test failures.
 
 ## Repository Layout
 
