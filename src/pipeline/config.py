@@ -8,8 +8,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 class LibConfig:
     library: str | None
     attempts: int
-    mode: str
+    repair: bool
     llm_backend: str
+
+    @property
+    def mode(self) -> str:
+        return "repair" if self.repair else "final"
 
     @property
     def libraries_csv(self) -> Path:
@@ -82,11 +86,9 @@ def parse_args() -> LibConfig:
     )
 
     parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["repair", "final"],
-        required=True,
-        help="Experiment mode: repair for repair-attempt comparison, final for final coverage experiment.",
+        "--repair",
+        action="store_true",
+        help="Run in repair mode (default is final mode).",
     )
 
     parser.add_argument(
@@ -118,7 +120,7 @@ def parse_args() -> LibConfig:
     return LibConfig(
         library=args.library,
         attempts=args.attempts,
-        mode=args.mode,
+        repair=args.repair,
         llm_backend=args.llm_backend,
     )
 
