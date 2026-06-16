@@ -1,5 +1,7 @@
 # LLM-based Test Generation Pipeline
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20718478.svg)](https://doi.org/10.5281/zenodo.20718478)
+
 This repository contains the implementation and experimental framework used in the Bachelor's thesis project to evaluate LLM-based unit test generation for Java libraries. The pipeline generates JUnit 4 test suites, validates and repairs generated tests, and records code coverage, test validity, runtime, and cost metrics.
 
 ## Prerequisites
