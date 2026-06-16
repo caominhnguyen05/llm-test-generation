@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from pipeline.config import LibConfig
+from pipeline.config import LibConfig, REPO_ROOT
 from pipeline.maven_runner import run_maven
 
 def find_testable_sources(config: LibConfig) -> list[Path]:
@@ -149,7 +149,7 @@ def extract_api_summary(
     class_name: str,
 ) -> str:
     java_file = java_file.resolve()
-    extractor_dir = Path("tools/java-api-extractor").resolve()
+    extractor_dir = REPO_ROOT / "src" / "tools" / "java-api-extractor"
 
     if not extractor_dir.exists():
         raise FileNotFoundError(f"Java API extractor folder not found: {extractor_dir}")

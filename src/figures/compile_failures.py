@@ -9,7 +9,7 @@ import pandas as pd
 
 
 CATEGORY_LABELS = {
-    "structure_error": "Structure Error",
+    "structure_error": "Structural Error",
     "junit_version_mismatch": "JUnit Version Mismatch",
     "missing_import": "Missing Import",
     "method_signature_mismatch": "Method Signature Mismatch",
@@ -26,9 +26,9 @@ CATEGORY_LABELS = {
 
 
 def main() -> None:
-    root_dir = Path(__file__).resolve().parents[1]
-    input_path = root_dir / "results" / "final" / "ollama" / "compile_failures_summary.csv"
-    output_path = root_dir / "results" / "final" / "ollama" / "compile_failure_categories.pdf"
+    root_dir = Path(__file__).resolve().parents[2]
+    input_path = root_dir / "results" / "final" / "local_llm" / "compile_failures_summary.csv"
+    output_path = root_dir / "results" / "figures" / "rq2_compile_errors.pdf"
 
     df = pd.read_csv(input_path)
     df["compile_failures"] = pd.to_numeric(

@@ -26,10 +26,6 @@ target/
 *.war
 *.ear
 
-# Generated library workspaces
-libraries_repair_*/
-libraries_final_*/
+# Generated tests and experiment logs
+generated_tests/
 experiment_logs/
-results/figures/
-csv_data/small_libraries.csv
-llm_tests/

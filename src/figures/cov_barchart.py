@@ -41,22 +41,22 @@ def load_coverage_csv(path: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    root_dir = Path(__file__).resolve().parents[1]
+    root_dir = Path(__file__).resolve().parents[2]
 
     # Load CSV files
-    qwen = load_coverage_csv(root_dir / "results" / "final" / "ollama" / "coverage.csv")
-    deepseek = load_coverage_csv(
-        root_dir / "results" / "final" / "openrouter" / "coverage.csv"
+    local_llm = load_coverage_csv(root_dir / "results" / "final" / "local_llm" / "coverage.csv")
+    cloud_llm = load_coverage_csv(
+        root_dir / "results" / "final" / "cloud_llm" / "coverage.csv"
     )
-    evosuite = load_coverage_csv(root_dir / "csv_data" / "evosuite_original.csv")
+    evosuite = load_coverage_csv(root_dir / "datasets" / "evosuite_baseline.csv")
 
-    qwen["source"] = "Qwen 2.5-Coder-7B"
-    deepseek["source"] = "Deepseek V4 Flash"
+    local_llm["source"] = "Qwen 2.5-Coder-7B"
+    cloud_llm["source"] = "Deepseek V4 Flash"
     evosuite["source"] = "EvoSuite"
 
     # Find libraries that exist in all CSV files.
-    common_libraries = qwen[KEY_COLUMNS].drop_duplicates().merge(
-        deepseek[KEY_COLUMNS].drop_duplicates(), on=KEY_COLUMNS
+    common_libraries = local_llm[KEY_COLUMNS].drop_duplicates().merge(
+        cloud_llm[KEY_COLUMNS].drop_duplicates(), on=KEY_COLUMNS
     )
     common_libraries = common_libraries.merge(
         evosuite[KEY_COLUMNS].drop_duplicates(), on=KEY_COLUMNS
@@ -67,7 +67,7 @@ def main() -> None:
             "No matching rows found across qwen, Deepseek, and EvoSuite CSV files."
         )
 
-    df = pd.concat([qwen, deepseek, evosuite], ignore_index=True)
+    df = pd.concat([local_llm, cloud_llm, evosuite], ignore_index=True)
     df = df.merge(common_libraries, on=KEY_COLUMNS, how="inner")
 
     # Keep only the columns needed for summary and plotting.
@@ -124,11 +124,11 @@ def main() -> None:
     plt.ylim(0, 110)
     plt.tight_layout()
 
-    plt.savefig(output_dir / "sq4_barchart.pdf")
+    plt.savefig(output_dir / "rq4_barchart.pdf")
     plt.close()
 
     print(f"\nMatched {len(common_libraries)} libraries across all CSV files.")
-    print(f"Saved plot to {output_dir / 'sq4_barchart.pdf'}")
+    print(f"Saved plot to {output_dir / 'rq4_barchart.pdf'}")
 
 
 if __name__ == "__main__":

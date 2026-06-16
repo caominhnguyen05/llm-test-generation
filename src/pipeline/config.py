@@ -2,7 +2,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 @dataclass(frozen=True)
 class LibConfig:
@@ -20,13 +20,15 @@ class LibConfig:
     @property
     def libraries_root(self) -> Path:
         if self.mode == "final":
-            return REPO_ROOT / f"libraries_final_{self.llm_backend}"
-        return REPO_ROOT / f"libraries_repair_{self.attempts}"
+            return REPO_ROOT / "generated_tests"/ f"tests_final_{self.llm_backend}"
+        return REPO_ROOT / "generated_tests" / f"tests_repair_{self.attempts}"
     
     @property
     def results_root(self) -> Path:
         if self.mode == "final":
-            return REPO_ROOT / "results" / "final" / self.llm_backend
+            if self.llm_backend == "ollama":
+                return REPO_ROOT / "results" / "final" / "local_llm"
+            return REPO_ROOT / "results" / "final" / "cloud_llm"
         return REPO_ROOT / "results" / "repair" / f"repair_{self.attempts}"
     
     @property

@@ -49,64 +49,14 @@ def library_label(row: pd.Series) -> str:
     return f"{row['group_id']}:{row['artifact_id']}:{row['version']}"
 
 
-def print_line_branch_winners(llm_csv: str, evosuite_csv: str) -> None:
-    llm = load_coverage_csv(llm_csv)
-    evosuite = load_coverage_csv(evosuite_csv)
-
-    matched = llm.merge(
-        evosuite,
-        on=KEY_COLUMNS,
-        how="inner",
-        suffixes=("_llm", "_evosuite"),
-    )
-
-    comparable = matched.dropna(
-        subset=[
-            "line_coverage_llm",
-            "line_coverage_evosuite",
-            "branch_coverage_llm",
-            "branch_coverage_evosuite",
-        ]
-    ).copy()
-
-    llm_higher = comparable[
-        (comparable["line_coverage_llm"] > comparable["line_coverage_evosuite"])
-        & (comparable["branch_coverage_llm"] > comparable["branch_coverage_evosuite"])
-    ]
-    evosuite_higher = comparable[
-        (comparable["line_coverage_evosuite"] > comparable["line_coverage_llm"])
-        & (comparable["branch_coverage_evosuite"] > comparable["branch_coverage_llm"])
-    ]
-
-    print("\nLine and branch coverage comparison on matched libraries:")
-    print(f"Matched rows with line and branch coverage: {len(comparable)}")
-
-    print(f"\nLLM higher: {len(llm_higher)}")
-    for _, row in llm_higher.iterrows():
-        print(
-            f"  {library_label(row)} "
-            f"(line: LLM {format_percent(row['line_coverage_llm'])}, "
-            f"EvoSuite {format_percent(row['line_coverage_evosuite'])}; "
-            f"branch: LLM {format_percent(row['branch_coverage_llm'])}, "
-            f"EvoSuite {format_percent(row['branch_coverage_evosuite'])})"
-        )
-
-    print(f"\nEvoSuite higher: {len(evosuite_higher)}")
-    for _, row in evosuite_higher.iterrows():
-        print(
-            f"  {library_label(row)} "
-            f"(line: EvoSuite {format_percent(row['line_coverage_evosuite'])}, "
-            f"LLM {format_percent(row['line_coverage_llm'])}; "
-            f"branch: EvoSuite {format_percent(row['branch_coverage_evosuite'])}, "
-            f"LLM {format_percent(row['branch_coverage_llm'])})"
-        )
-
-
 def main() -> None:
-    root_dir = Path(__file__).resolve().parents[1]
+    root_dir = Path(__file__).resolve().parents[2]
 
-    llm_csv = root_dir / "results" / "final" / "ollama" / "coverage.csv"
-    evosuite_csv = root_dir / "csv_data" / "evosuite_original.csv"
+    llm_csv = root_dir / "results" / "final" / "local_llm" / "coverage.csv"
+    evosuite_csv = root_dir / "datasets" / "evosuite_baseline.csv"
+
+    output_dir = root_dir / "results" / "figures"
+    output_dir.mkdir(exist_ok=True)
 
     llm = load_coverage_csv(llm_csv)
     evosuite = load_coverage_csv(evosuite_csv)
@@ -121,9 +71,6 @@ def main() -> None:
     df = pd.concat([llm, evosuite], ignore_index=True)
     df = df.merge(common_libraries, on=KEY_COLUMNS, how="inner")
     df = df[KEY_COLUMNS + COVERAGE_COLUMNS + ["source"]]
-
-    output_dir = root_dir / "results" / "figures"
-    output_dir.mkdir(exist_ok=True)
 
     summary_stats = df.groupby("source")[COVERAGE_COLUMNS].agg(["mean", "median"])
     table_rows = []
@@ -163,8 +110,8 @@ def main() -> None:
         ]
     )
 
-    table_path = output_dir / "coverage_summary_table.tex"
-    plot_path = output_dir / "coverage_boxplot.pdf"
+    table_path = output_dir / "rq1_coverage_table.tex"
+    plot_path = output_dir / "rq1_boxplot.pdf"
 
 
     with open(table_path, "w", encoding="utf-8") as f:
@@ -265,7 +212,6 @@ def main() -> None:
     plt.close()
 
     print(f"\nMatched {len(common_libraries)} of {len(llm)} LLM row(s).")
-    print_line_branch_winners(llm_csv, evosuite_csv)
     print(f"Saved plot to {plot_path}")
     print(f"Saved summary to {table_path}")
 

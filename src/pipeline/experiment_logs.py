@@ -2,17 +2,14 @@ from datetime import datetime
 from pathlib import Path
 from shutil import rmtree
 
-from pipeline.config import LibConfig
-
-
-LOG_ROOT = Path("experiment_logs")
+from pipeline.config import LibConfig, REPO_ROOT
 
 
 def get_library_log_dir(config: LibConfig) -> Path:
     library_name = f"{config.group_id}_{config.artifact_id}_{config.version}"
     if config.mode == "final":
-        return LOG_ROOT / f"final_{config.llm_backend}" / library_name
-    return LOG_ROOT / f"repair_{config.attempts}" / library_name
+        return REPO_ROOT / "experiment_logs" / f"final_{config.llm_backend}" / library_name
+    return REPO_ROOT / "experiment_logs" / f"repair_{config.attempts}" / library_name
 
 
 def clear_library_logs(config: LibConfig) -> None:
